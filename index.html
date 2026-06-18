@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A luxury-styled browser implementation of Toepen with bot opponents, lives, Dirty Laundry, Toep raises, and fourth-trick scoring."
+    />
+    <meta name="theme-color" content="#090806" />
+    <title>Toepen Royale</title>
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="screen menu-screen" id="menuScreen">
+        <div class="menu-art">
+          <div class="deck-stack" aria-hidden="true">
+            <div class="show-card red">10<span>&hearts;</span></div>
+            <div class="show-card black">9<span>&spades;</span></div>
+            <div class="show-card red">8<span>&diams;</span></div>
+          </div>
+        </div>
+
+        <div class="menu-copy">
+          <p class="eyebrow">Dutch bluff table</p>
+          <h1>Toepen Royale</h1>
+          <p class="lede">
+            Win the fourth trick, pressure the table with Toep calls, and keep
+            your last lives under velvet-black lights.
+          </p>
+
+          <div class="setup-panel" aria-labelledby="playersHeading">
+            <div>
+              <p class="panel-kicker">Table setup</p>
+              <h2 id="playersHeading">Co-players</h2>
+            </div>
+            <div class="player-picker" id="playerPicker" role="group" aria-label="Choose co-players"></div>
+            <div class="setup-row">
+              <span>Human</span>
+              <strong>1</strong>
+            </div>
+            <div class="setup-row">
+              <span>Bots</span>
+              <strong id="botCountLabel">2</strong>
+            </div>
+            <div class="setup-row">
+              <span>Starting lives</span>
+              <strong>10</strong>
+            </div>
+            <button class="primary-action" id="startGameBtn" type="button">Take seat</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen game-screen hidden" id="gameScreen">
+        <header class="game-header">
+          <div>
+            <p class="eyebrow">Toepen Royale</p>
+            <h2 id="roundTitle">Round 1</h2>
+          </div>
+          <div class="table-meters" aria-label="Round status">
+            <div>
+              <span>Stake</span>
+              <strong id="stakeValue">1</strong>
+            </div>
+            <div>
+              <span>Trick</span>
+              <strong id="trickValue">1 / 4</strong>
+            </div>
+            <div>
+              <span>Lead</span>
+              <strong id="leadValue">-</strong>
+            </div>
+          </div>
+          <button class="ghost-action" id="newGameBtn" type="button">New table</button>
+        </header>
+
+        <div class="game-layout">
+          <aside class="scoreboard" aria-label="Player lives">
+            <div class="section-title">
+              <span>Players</span>
+              <small id="activeCount">0 active</small>
+            </div>
+            <div id="scoreboardList" class="scoreboard-list"></div>
+          </aside>
+
+          <section class="felt-table" aria-label="Card table">
+            <div class="opponent-rail" id="opponentRail"></div>
+
+            <div class="table-core">
+              <div class="pot-ring">
+                <div>
+                  <span>Current stake</span>
+                  <strong id="centerStake">1 life</strong>
+                </div>
+              </div>
+              <div class="trick-area" id="trickArea"></div>
+            </div>
+
+            <div class="hand-zone">
+              <div class="hand-label">
+                <span>Your hand</span>
+                <small id="handHint">Choose a card when it is your turn.</small>
+              </div>
+              <div class="hand" id="humanHand"></div>
+            </div>
+          </section>
+
+          <aside class="command-panel">
+            <div class="section-title">
+              <span>Action</span>
+              <small id="phaseLabel">Menu</small>
+            </div>
+            <div class="action-box" id="actionBox"></div>
+            <div class="quick-actions">
+              <button class="danger-action" id="toepBtn" type="button">Toep!</button>
+              <button class="ghost-action" id="rulesBtn" type="button">Rules</button>
+            </div>
+            <div class="log-panel" aria-live="polite">
+              <div class="section-title">
+                <span>Table log</span>
+                <small>latest first</small>
+              </div>
+              <div class="log-list" id="logList"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen end-screen hidden" id="endScreen">
+        <div class="end-card">
+          <p class="eyebrow">Match finished</p>
+          <h2 id="endTitle">Champion</h2>
+          <p id="endCopy"></p>
+          <button class="primary-action" id="playAgainBtn" type="button">Play again</button>
+        </div>
+      </section>
+
+      <dialog class="rules-dialog" id="rulesDialog">
+        <div class="section-title">
+          <span>Rules</span>
+          <button class="icon-action" id="closeRulesBtn" type="button" aria-label="Close rules">x</button>
+        </div>
+        <ol>
+          <li>Each active player gets four cards from a 32-card deck.</li>
+          <li>Card power is 10, 9, 8, 7, A, K, Q, J. There is no trump.</li>
+          <li>Dirty Laundry can exchange a weak hand: four A/K/Q/J cards, or three of those plus one 7.</li>
+          <li>Players must follow the led suit when possible.</li>
+          <li>Only the fourth trick decides the round winner.</li>
+          <li>Toep raises the stake by one. Folding pays the previous stake immediately.</li>
+          <li>Active round losers pay the current stake. Players at zero lives leave the table.</li>
+        </ol>
+      </dialog>
+    </main>
+
+    <script src="assets/js/script.js"></script>
+  </body>
+</html>
