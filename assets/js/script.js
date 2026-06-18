@@ -9,6 +9,51 @@ const RANKS = ["7", "8", "9", "10", "J", "Q", "K", "A"];
 const POWER = { "10": 8, "9": 7, "8": 6, "7": 5, A: 4, K: 3, Q: 2, J: 1 };
 const DIRTY_CORE = new Set(["A", "K", "Q", "J"]);
 const BOT_NAMES = ["Rook", "Sable", "Vesper", "Marlow", "Onyx", "Sterling", "Crown"];
+const PIP_LAYOUTS = {
+  A: [{ x: 50, y: 50, large: true }],
+  "7": [
+    { x: 30, y: 17 },
+    { x: 70, y: 17 },
+    { x: 30, y: 35 },
+    { x: 70, y: 35 },
+    { x: 50, y: 50 },
+    { x: 30, y: 83, down: true },
+    { x: 70, y: 83, down: true },
+  ],
+  "8": [
+    { x: 30, y: 17 },
+    { x: 70, y: 17 },
+    { x: 30, y: 35 },
+    { x: 70, y: 35 },
+    { x: 30, y: 65, down: true },
+    { x: 70, y: 65, down: true },
+    { x: 30, y: 83, down: true },
+    { x: 70, y: 83, down: true },
+  ],
+  "9": [
+    { x: 30, y: 15 },
+    { x: 70, y: 15 },
+    { x: 30, y: 33 },
+    { x: 70, y: 33 },
+    { x: 50, y: 50 },
+    { x: 30, y: 67, down: true },
+    { x: 70, y: 67, down: true },
+    { x: 30, y: 85, down: true },
+    { x: 70, y: 85, down: true },
+  ],
+  "10": [
+    { x: 30, y: 13 },
+    { x: 70, y: 13 },
+    { x: 30, y: 29 },
+    { x: 70, y: 29 },
+    { x: 30, y: 45 },
+    { x: 70, y: 45 },
+    { x: 30, y: 61, down: true },
+    { x: 70, y: 61, down: true },
+    { x: 30, y: 77, down: true },
+    { x: 70, y: 77, down: true },
+  ],
+};
 const DELAYS = {
   dirtyOpen: 950,
   dirtyDecision: 1150,
@@ -57,6 +102,7 @@ let state = null;
 let timer = null;
 
 function boot() {
+  syncViewportSize();
   buildPlayerPicker();
   els.startGameBtn.addEventListener("click", () => startGame(selectedBotCount));
   els.playAgainBtn.addEventListener("click", showMenu);
@@ -65,6 +111,9 @@ function boot() {
   els.toepBtn.addEventListener("click", () => humanToep());
   els.rulesBtn.addEventListener("click", () => els.rulesDialog.showModal());
   els.closeRulesBtn.addEventListener("click", () => els.rulesDialog.close());
+  window.addEventListener("resize", syncViewportSize);
+  window.addEventListener("orientationchange", syncViewportSize);
+  window.visualViewport?.addEventListener("resize", syncViewportSize);
   document.addEventListener("fullscreenchange", renderFullscreenButton);
   document.addEventListener("webkitfullscreenchange", renderFullscreenButton);
   showMenu();
@@ -90,7 +139,7 @@ function buildPlayerPicker() {
 function showMenu() {
   clearTimer();
   state = null;
-  document.body.classList.remove("game-active");
+  document.body.classList.remove("game-active", "app-fullscreen", "fullscreen-fallback");
   els.menuScreen.classList.remove("hidden");
   els.gameScreen.classList.add("hidden");
   els.endScreen.classList.add("hidden");
@@ -807,22 +856,63 @@ function renderCard(card, options = {}) {
   const element = document.createElement(options.asButton ? "button" : "div");
   element.className = `card ${card.red ? "red-card" : "black-card"}`;
   if (options.asButton) element.type = "button";
+  element.dataset.rank = card.rank;
+  element.dataset.suit = card.suit;
 
-  const rank = document.createElement("div");
-  rank.className = "rank";
-  rank.textContent = card.rank;
+  const topCorner = renderCorner(card, "top");
+  const bottomCorner = renderCorner(card, "bottom");
+  const face = document.createElement("div");
+  const isCourt = ["J", "Q", "K"].includes(card.rank);
+  face.className = `card-face ${isCourt ? "court-face" : "pip-face"}`;
 
-  const suit = document.createElement("div");
-  suit.className = "suit";
-  suit.textContent = card.symbol;
+  if (isCourt) {
+    const portrait = document.createElement("div");
+    portrait.className = "court-portrait";
 
-  const power = document.createElement("div");
-  power.className = "power";
-  power.textContent = `Power ${card.power}`;
+    const crown = document.createElement("div");
+    crown.className = "court-crown";
+    crown.textContent = card.rank === "K" ? "K" : card.rank === "Q" ? "Q" : "J";
 
-  element.append(rank, suit, power);
+    const centerSuit = document.createElement("div");
+    centerSuit.className = "court-suit";
+    centerSuit.textContent = card.symbol;
+
+    const flourish = document.createElement("div");
+    flourish.className = "court-flourish";
+    flourish.textContent = card.rank === "K" ? "ROYAL" : card.rank === "Q" ? "QUEEN" : "KNAVE";
+
+    portrait.append(crown, centerSuit, flourish);
+    face.append(portrait);
+  } else {
+    for (const pipSpec of PIP_LAYOUTS[card.rank] || []) {
+      const pip = document.createElement("span");
+      pip.className = `pip${pipSpec.down ? " pip-down" : ""}${pipSpec.large ? " pip-large" : ""}`;
+      pip.textContent = card.symbol;
+      pip.style.setProperty("--x", `${pipSpec.x}%`);
+      pip.style.setProperty("--y", `${pipSpec.y}%`);
+      face.append(pip);
+    }
+  }
+
+  element.append(topCorner, face, bottomCorner);
   element.setAttribute("aria-label", cardLabel(card));
   return element;
+}
+
+function renderCorner(card, position) {
+  const corner = document.createElement("div");
+  corner.className = `corner corner-${position}`;
+
+  const rank = document.createElement("span");
+  rank.className = "corner-rank";
+  rank.textContent = card.rank;
+
+  const suit = document.createElement("span");
+  suit.className = "corner-suit";
+  suit.textContent = card.symbol;
+
+  corner.append(rank, suit);
+  return corner;
 }
 
 function renderActionBox() {
@@ -904,14 +994,24 @@ function setupMobilePanels() {
 }
 
 async function toggleFullscreen() {
+  const isAppFullscreen = getFullscreenElement() || document.body.classList.contains("app-fullscreen");
   try {
-    if (!getFullscreenElement()) {
-      await requestGameFullscreen();
+    if (!isAppFullscreen) {
+      document.body.classList.add("app-fullscreen");
+      syncViewportSize();
+      await requestGameFullscreen().catch(() => {
+        document.body.classList.add("fullscreen-fallback");
+      });
       await lockLandscapeWhenPossible();
+      window.scrollTo?.(0, 0);
     } else {
       await exitGameFullscreen();
+      document.body.classList.remove("app-fullscreen", "fullscreen-fallback");
     }
   } catch (_error) {
+    document.body.classList.add("app-fullscreen", "fullscreen-fallback");
+  } finally {
+    syncViewportSize();
     renderFullscreenButton();
   }
 }
@@ -921,13 +1021,25 @@ function getFullscreenElement() {
 }
 
 function requestGameFullscreen() {
-  const request = els.gameScreen.requestFullscreen || els.gameScreen.webkitRequestFullscreen;
-  return request ? request.call(els.gameScreen) : Promise.reject(new Error("Fullscreen unavailable"));
+  const targets = [els.gameScreen, document.documentElement, document.body].filter(Boolean);
+  for (const target of targets) {
+    const request =
+      target.requestFullscreen ||
+      target.webkitRequestFullscreen ||
+      target.mozRequestFullScreen ||
+      target.msRequestFullscreen;
+    if (request) return request.call(target);
+  }
+  return Promise.reject(new Error("Fullscreen unavailable"));
 }
 
 function exitGameFullscreen() {
-  const exit = document.exitFullscreen || document.webkitExitFullscreen;
-  return exit ? exit.call(document) : Promise.resolve();
+  const exit =
+    document.exitFullscreen ||
+    document.webkitExitFullscreen ||
+    document.mozCancelFullScreen ||
+    document.msExitFullscreen;
+  return getFullscreenElement() && exit ? exit.call(document) : Promise.resolve();
 }
 
 async function lockLandscapeWhenPossible() {
@@ -943,7 +1055,17 @@ async function lockLandscapeWhenPossible() {
 
 function renderFullscreenButton() {
   if (!els.fullscreenBtn) return;
-  els.fullscreenBtn.textContent = getFullscreenElement() ? "Exit full" : "Fullscreen";
+  const isFull = getFullscreenElement() || document.body.classList.contains("app-fullscreen");
+  els.fullscreenBtn.textContent = isFull ? "Exit full" : "Fullscreen";
+  els.fullscreenBtn.setAttribute("aria-pressed", String(Boolean(isFull)));
+}
+
+function syncViewportSize() {
+  const viewport = window.visualViewport;
+  const height = viewport?.height || window.innerHeight || document.documentElement.clientHeight;
+  const width = viewport?.width || window.innerWidth || document.documentElement.clientWidth;
+  document.documentElement.style.setProperty("--app-height", `${height}px`);
+  document.documentElement.style.setProperty("--app-width", `${width}px`);
 }
 
 function actionButton(text, className, handler) {

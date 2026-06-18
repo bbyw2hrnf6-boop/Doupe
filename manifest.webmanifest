@@ -1,0 +1,13 @@
+{
+  "name": "Toepen Royale",
+  "short_name": "Toepen",
+  "description": "A luxury-styled browser implementation of Toepen.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#090806",
+  "theme_color": "#090806",
+  "categories": ["games", "card"],
+  "lang": "en"
+}

@@ -13,6 +13,8 @@
   --green: #5fc48a;
   --line: rgba(244, 214, 150, 0.2);
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+  --app-height: 100svh;
+  --app-width: 100vw;
 }
 
 * {
@@ -35,6 +37,14 @@ body {
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 28px),
     linear-gradient(155deg, rgba(13, 51, 39, 0.26), transparent 42%),
     linear-gradient(135deg, #070604, #17110c 48%, #050504);
+}
+
+body.app-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: var(--app-height);
+  overflow: hidden;
 }
 
 button {
@@ -565,16 +575,32 @@ button:not(:disabled):hover {
   transform: translate(calc(var(--i) * 20px), calc(var(--i) * 3px)) rotate(calc((var(--i) - 1.5) * 2.4deg));
 }
 
-.pile-card .rank {
+.pile-card .corner-rank {
+  font-size: 0.98rem;
+}
+
+.pile-card .corner-suit {
+  font-size: 0.86rem;
+}
+
+.pile-card .pip {
   font-size: 1.34rem;
 }
 
-.pile-card .suit {
-  font-size: 2.18rem;
+.pile-card .pip-large {
+  font-size: 2.62rem;
 }
 
-.pile-card .power {
-  font-size: 0.5rem;
+.pile-card .court-crown {
+  font-size: 0.95rem;
+}
+
+.pile-card .court-suit {
+  font-size: 1.2rem;
+}
+
+.pile-card .court-flourish {
+  font-size: 0.34rem;
 }
 
 .hand-zone {
@@ -604,20 +630,46 @@ button:not(:disabled):hover {
 
 .card {
   position: relative;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: block;
   width: clamp(76px, 9vw, 108px);
   aspect-ratio: 0.72;
-  padding: 10px;
+  padding: 0;
   border: 1px solid rgba(20, 16, 11, 0.2);
   border-radius: 8px;
   color: #1b1611;
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(232, 224, 207, 0.98)),
-    repeating-linear-gradient(45deg, transparent 0 10px, rgba(215, 173, 93, 0.08) 10px 11px);
+    radial-gradient(circle at 18% 22%, rgba(122, 83, 42, 0.11), transparent 1.9px),
+    radial-gradient(circle at 78% 66%, rgba(122, 83, 42, 0.08), transparent 1.6px),
+    repeating-linear-gradient(0deg, rgba(71, 48, 28, 0.035) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 5px),
+    linear-gradient(160deg, #fffaf0, #e9dec8 48%, #fff6e8);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
   text-align: left;
   user-select: none;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(126, 80, 34, 0.28);
+  border-radius: 5px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+    inset 0 0 16px rgba(120, 70, 28, 0.08);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border: 1px solid rgba(215, 173, 93, 0.22);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .card.playable {
@@ -633,25 +685,124 @@ button:not(:disabled):hover {
   opacity: 0.5;
 }
 
-.card .rank {
+.corner {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  width: 18px;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.75rem;
+  font-weight: 900;
+  line-height: 0.9;
+}
+
+.corner-top {
+  top: 8px;
+  left: 8px;
+}
+
+.corner-bottom {
+  right: 8px;
+  bottom: 8px;
+  transform: rotate(180deg);
+}
+
+.corner-rank {
+  font-size: 1.08rem;
+  letter-spacing: 0;
+}
+
+.corner-suit {
+  margin-top: 2px;
+  font-size: 0.98rem;
+}
+
+.card-face {
+  position: absolute;
+  z-index: 2;
+  inset: 17% 15%;
+}
+
+.pip {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.58rem;
   font-weight: 900;
   line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
 }
 
-.card .suit {
-  align-self: center;
-  justify-self: center;
-  font-size: 2.8rem;
+.pip-down {
+  transform: translate(-50%, -50%) rotate(180deg);
 }
 
-.card .power {
-  align-self: end;
-  color: rgba(20, 16, 11, 0.55);
-  font-size: 0.68rem;
+.pip-large {
+  font-size: 3.2rem;
+}
+
+.court-face {
+  inset: 15% 17%;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(126, 80, 34, 0.26);
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(126, 80, 34, 0.16) 49% 51%, transparent 52%),
+    repeating-linear-gradient(45deg, rgba(126, 80, 34, 0.06) 0 1px, transparent 1px 8px),
+    rgba(252, 240, 216, 0.78);
+  overflow: hidden;
+}
+
+.court-face::before,
+.court-face::after {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  height: 1px;
+  background: rgba(126, 80, 34, 0.32);
+}
+
+.court-face::before {
+  top: 16%;
+}
+
+.court-face::after {
+  bottom: 16%;
+}
+
+.court-portrait {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  align-content: center;
+  width: 72%;
+  height: 78%;
+  border: 1px solid currentColor;
+  border-radius: 999px 999px 14px 14px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.56), transparent 20%),
+    linear-gradient(145deg, rgba(215, 173, 93, 0.22), rgba(255, 255, 255, 0.18));
+}
+
+.court-crown {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.18rem;
   font-weight: 900;
-  text-transform: uppercase;
+}
+
+.court-suit {
+  font-size: 1.55rem;
+}
+
+.court-flourish {
+  font-size: 0.44rem;
+  font-weight: 900;
+  letter-spacing: 0;
 }
 
 .card.red-card {
@@ -797,8 +948,8 @@ button:not(:disabled):hover {
       max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
 
-  body.game-active .app-shell {
-    height: 100svh;
+body.game-active .app-shell {
+    height: var(--app-height);
     padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
       max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     overflow: hidden;
@@ -809,7 +960,7 @@ button:not(:disabled):hover {
   }
 
   .game-screen {
-    height: calc(100svh - 12px);
+    height: calc(var(--app-height) - 12px);
     min-height: 0;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 6px;
@@ -817,13 +968,17 @@ button:not(:disabled):hover {
   }
 
   .game-screen:fullscreen {
-    height: 100svh;
+    height: var(--app-height);
     padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
       max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     background:
       repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 28px),
       linear-gradient(155deg, rgba(13, 51, 39, 0.26), transparent 42%),
       linear-gradient(135deg, #070604, #17110c 48%, #050504);
+  }
+
+  body.app-fullscreen .game-screen {
+    height: calc(var(--app-height) - 12px);
   }
 
   .menu-screen {
@@ -1072,19 +1227,49 @@ button:not(:disabled):hover {
     max-width: 76px;
     min-height: 104px;
     justify-self: center;
-    padding: 6px;
+    padding: 0;
   }
 
-  .card .rank {
+  .corner {
+    width: 14px;
+  }
+
+  .corner-top {
+    top: 6px;
+    left: 6px;
+  }
+
+  .corner-bottom {
+    right: 6px;
+    bottom: 6px;
+  }
+
+  .corner-rank {
+    font-size: 0.78rem;
+  }
+
+  .corner-suit {
+    font-size: 0.72rem;
+  }
+
+  .pip {
+    font-size: 1.04rem;
+  }
+
+  .pip-large {
+    font-size: 2.1rem;
+  }
+
+  .court-crown {
+    font-size: 0.78rem;
+  }
+
+  .court-suit {
     font-size: 1rem;
   }
 
-  .card .suit {
-    font-size: 1.72rem;
-  }
-
-  .card .power {
-    font-size: 0.48rem;
+  .court-flourish {
+    font-size: 0.28rem;
   }
 
   .card.playable:hover {
@@ -1115,20 +1300,36 @@ button:not(:disabled):hover {
   .pile-card.card {
     width: 56px;
     min-height: 76px;
-    padding: 4px;
+    padding: 0;
     transform: translate(calc(var(--i) * 12px), calc(var(--i) * 1px)) rotate(calc((var(--i) - 1.5) * 2.4deg));
   }
 
-  .pile-card .rank {
-    font-size: 0.88rem;
+  .pile-card .corner-rank {
+    font-size: 0.62rem;
   }
 
-  .pile-card .suit {
-    font-size: 1.34rem;
+  .pile-card .corner-suit {
+    font-size: 0.58rem;
   }
 
-  .pile-card .power {
-    font-size: 0.36rem;
+  .pile-card .pip {
+    font-size: 0.82rem;
+  }
+
+  .pile-card .pip-large {
+    font-size: 1.62rem;
+  }
+
+  .pile-card .court-crown {
+    font-size: 0.6rem;
+  }
+
+  .pile-card .court-suit {
+    font-size: 0.76rem;
+  }
+
+  .pile-card .court-flourish {
+    font-size: 0.22rem;
   }
 
   .action-box {
@@ -1251,19 +1452,23 @@ button:not(:disabled):hover {
   .pile-card.card {
     width: 52px;
     min-height: 70px;
-    padding: 4px;
+    padding: 0;
   }
 
-  .card .power {
-    font-size: 0.48rem;
+  .card .corner-rank {
+    font-size: 0.72rem;
   }
 
-  .card .rank {
-    font-size: 0.98rem;
+  .card .corner-suit {
+    font-size: 0.66rem;
   }
 
-  .card .suit {
-    font-size: 1.65rem;
+  .card .pip {
+    font-size: 0.96rem;
+  }
+
+  .card .pip-large {
+    font-size: 1.9rem;
   }
 
   .show-card {
@@ -1322,34 +1527,38 @@ button:not(:disabled):hover {
   }
 
   body.game-active .app-shell {
-    height: 100svh;
-    padding: max(4px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
-      max(4px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    height: var(--app-height);
+    padding: max(3px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right))
+      max(3px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
     overflow: hidden;
   }
 
   .game-screen {
-    height: calc(100svh - 8px);
+    height: calc(var(--app-height) - 6px);
     min-height: 0;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 4px;
+    gap: 3px;
     overflow: hidden;
   }
 
   .game-screen:fullscreen {
-    height: 100svh;
-    padding: max(4px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
-      max(4px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    height: var(--app-height);
+    padding: max(3px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right))
+      max(3px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
     background:
       repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 28px),
       linear-gradient(155deg, rgba(13, 51, 39, 0.26), transparent 42%),
       linear-gradient(135deg, #070604, #17110c 48%, #050504);
   }
 
+  body.app-fullscreen .game-screen {
+    height: calc(var(--app-height) - 6px);
+  }
+
   .game-header {
-    grid-template-columns: minmax(62px, 0.5fr) minmax(150px, 1fr) auto;
-    gap: 5px;
-    padding: 4px;
+    grid-template-columns: minmax(46px, 0.34fr) minmax(126px, 1fr) auto;
+    gap: 3px;
+    padding: 3px;
     position: relative;
     z-index: 8;
   }
@@ -1359,53 +1568,53 @@ button:not(:disabled):hover {
   }
 
   .game-header h2 {
-    font-size: 0.9rem;
+    font-size: 0.68rem;
     line-height: 1;
   }
 
   .table-meters {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px;
+    gap: 3px;
   }
 
   .table-meters div {
     min-width: 0;
-    padding: 4px 6px;
+    padding: 3px 4px;
   }
 
   .table-meters span,
   .pot-ring span,
   .section-title small,
   .hand-label small {
-    font-size: 0.54rem;
+    font-size: 0.43rem;
   }
 
   .table-meters strong,
   .pot-ring strong {
     margin-top: 0;
-    font-size: 0.72rem;
+    font-size: 0.58rem;
   }
 
   .header-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4px;
+    gap: 3px;
   }
 
   .header-actions .ghost-action {
-    min-height: 24px;
-    padding: 0 7px;
-    font-size: 0.6rem;
+    min-height: 19px;
+    padding: 0 5px;
+    font-size: 0.48rem;
     white-space: nowrap;
   }
 
   .game-layout {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(210px, 250px);
+    grid-template-columns: minmax(0, 1fr) minmax(148px, 176px);
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "table command";
-    gap: 6px;
+    gap: 4px;
     height: 100%;
     overflow: hidden;
   }
@@ -1415,19 +1624,19 @@ button:not(:disabled):hover {
     z-index: 6;
     top: 6px;
     left: 6px;
-    width: min(56vw, 360px);
-    padding: 5px;
+    width: min(42vw, 260px);
+    padding: 3px;
     overflow: hidden;
   }
 
   .scoreboard .section-title {
     margin-bottom: 3px;
-    font-size: 0.66rem;
+    font-size: 0.48rem;
   }
 
   .scoreboard-list {
     display: flex;
-    gap: 5px;
+    gap: 3px;
     overflow-x: auto;
     scrollbar-width: thin;
     padding-bottom: 1px;
@@ -1436,20 +1645,20 @@ button:not(:disabled):hover {
   .player-chip {
     flex: 0 0 auto;
     grid-template-columns: auto auto;
-    gap: 4px;
-    min-width: 68px;
-    padding: 5px;
+    gap: 3px;
+    min-width: 50px;
+    padding: 3px;
   }
 
   .seat-mark {
-    width: 20px;
-    font-size: 0.62rem;
+    width: 15px;
+    font-size: 0.48rem;
   }
 
   .player-name {
-    max-width: 48px;
+    max-width: 36px;
     overflow: hidden;
-    font-size: 0.62rem;
+    font-size: 0.48rem;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1462,44 +1671,44 @@ button:not(:disabled):hover {
     grid-column: 1 / -1;
     justify-self: stretch;
     min-width: 0;
-    min-height: 18px;
-    font-size: 0.62rem;
+    min-height: 14px;
+    font-size: 0.48rem;
   }
 
   .felt-table {
     height: 100%;
     min-height: 0;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 5px;
-    padding: 58px 6px 6px;
+    gap: 3px;
+    padding: 38px 4px 4px;
   }
 
   .felt-table::before {
-    inset: 8px;
+    inset: 6px;
   }
 
   .opponent-rail {
     display: flex;
-    gap: 5px;
-    min-height: 34px;
+    gap: 3px;
+    min-height: 24px;
     overflow-x: auto;
     scrollbar-width: thin;
   }
 
   .opponent-seat {
-    flex: 0 0 74px;
-    min-height: 34px;
-    padding: 4px;
-    font-size: 0.58rem;
+    flex: 0 0 52px;
+    min-height: 24px;
+    padding: 3px;
+    font-size: 0.44rem;
   }
 
   .mini-hand {
-    margin-top: 3px;
+    margin-top: 2px;
   }
 
   .mini-card {
-    width: 10px;
-    height: 14px;
+    width: 7px;
+    height: 10px;
     border-radius: 2px;
   }
 
@@ -1509,24 +1718,24 @@ button:not(:disabled):hover {
   }
 
   .pot-ring {
-    width: min(22vw, 116px);
+    width: min(17vw, 78px);
   }
 
   .trick-area {
-    gap: 5px;
+    gap: 3px;
   }
 
   .hand-zone {
-    padding: 5px;
+    padding: 3px;
   }
 
   .hand-label {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 5px;
+    gap: 3px;
     align-items: center;
-    margin-bottom: 4px;
-    font-size: 0.64rem;
+    margin-bottom: 2px;
+    font-size: 0.48rem;
   }
 
   .hand-label small {
@@ -1536,68 +1745,114 @@ button:not(:disabled):hover {
   .hand {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 5px;
+    gap: 3px;
     min-height: 0;
   }
 
   .card {
     width: 100%;
-    max-width: 58px;
-    min-height: 80px;
+    max-width: 42px;
+    min-height: 58px;
     justify-self: center;
-    padding: 5px;
+    padding: 0;
   }
 
-  .card .rank {
-    font-size: 0.86rem;
+  .corner {
+    width: 9px;
   }
 
-  .card .suit {
-    font-size: 1.38rem;
+  .corner-top {
+    top: 4px;
+    left: 4px;
   }
 
-  .card .power {
+  .corner-bottom {
+    right: 4px;
+    bottom: 4px;
+  }
+
+  .corner-rank {
+    font-size: 0.46rem;
+  }
+
+  .corner-suit {
     font-size: 0.42rem;
+  }
+
+  .pip {
+    font-size: 0.56rem;
+  }
+
+  .pip-large {
+    font-size: 1.08rem;
+  }
+
+  .court-crown {
+    font-size: 0.42rem;
+  }
+
+  .court-suit {
+    font-size: 0.52rem;
+  }
+
+  .court-flourish {
+    font-size: 0.14rem;
   }
 
   .played-card,
   .played-stack {
-    gap: 2px;
+    gap: 1px;
   }
 
   .played-card .byline,
   .played-stack .byline {
-    font-size: 0.48rem;
+    font-size: 0.36rem;
   }
 
   .played-card .card {
-    width: 34px;
-    min-height: 48px;
-    padding: 3px;
+    width: 28px;
+    min-height: 38px;
+    padding: 0;
   }
 
   .pile-cards {
-    width: 68px;
-    height: 56px;
+    width: 50px;
+    height: 40px;
   }
 
   .pile-card.card {
-    width: 40px;
-    min-height: 56px;
-    padding: 3px;
-    transform: translate(calc(var(--i) * 9px), calc(var(--i) * 1px)) rotate(calc((var(--i) - 1.5) * 2.4deg));
+    width: 28px;
+    min-height: 38px;
+    padding: 0;
+    transform: translate(calc(var(--i) * 7px), calc(var(--i) * 1px)) rotate(calc((var(--i) - 1.5) * 2.4deg));
   }
 
-  .pile-card .rank {
-    font-size: 0.68rem;
+  .pile-card .corner-rank {
+    font-size: 0.34rem;
   }
 
-  .pile-card .suit {
-    font-size: 1rem;
-  }
-
-  .pile-card .power {
+  .pile-card .corner-suit {
     font-size: 0.3rem;
+  }
+
+  .pile-card .pip {
+    font-size: 0.42rem;
+  }
+
+  .pile-card .pip-large {
+    font-size: 0.78rem;
+  }
+
+  .pile-card .court-crown {
+    font-size: 0.3rem;
+  }
+
+  .pile-card .court-suit {
+    font-size: 0.36rem;
+  }
+
+  .pile-card .court-flourish {
+    font-size: 0.1rem;
   }
 
   .command-panel {
@@ -1609,16 +1864,16 @@ button:not(:disabled):hover {
       "action"
       "log";
     align-content: start;
-    gap: 5px;
+    gap: 3px;
     max-height: 100%;
-    padding: 6px;
+    padding: 4px;
     overflow: hidden;
   }
 
   .command-panel > .section-title {
     grid-area: title;
     margin-bottom: 0;
-    font-size: 0.66rem;
+    font-size: 0.5rem;
   }
 
   .command-panel > .quick-actions {
@@ -1631,29 +1886,27 @@ button:not(:disabled):hover {
 
   .quick-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
+    gap: 3px;
     margin: 0;
   }
 
   .action-box {
     min-height: 0;
-    padding: 7px;
+    padding: 4px;
   }
 
   .action-box h3 {
-    margin-bottom: 3px;
-    font-size: 0.86rem;
+    margin-bottom: 2px;
+    font-size: 0.62rem;
   }
 
   .action-box p {
-    margin-bottom: 5px;
-    font-size: 0.64rem;
-    line-height: 1.2;
+    display: none;
   }
 
   .action-stack {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
+    gap: 3px;
   }
 
   .pick-button,
@@ -1661,9 +1914,9 @@ button:not(:disabled):hover {
   .ghost-action,
   .danger-action,
   .table-action {
-    min-height: 28px;
-    padding: 0 7px;
-    font-size: 0.66rem;
+    min-height: 21px;
+    padding: 0 5px;
+    font-size: 0.48rem;
   }
 
   .log-panel {
@@ -1673,17 +1926,17 @@ button:not(:disabled):hover {
 
   .log-panel summary {
     margin-bottom: 0;
-    font-size: 0.64rem;
+    font-size: 0.48rem;
   }
 
   .log-list {
-    max-height: 64px;
-    margin-top: 5px;
+    max-height: 42px;
+    margin-top: 3px;
   }
 
   .log-item {
-    padding: 5px;
-    font-size: 0.58rem;
+    padding: 3px;
+    font-size: 0.42rem;
     line-height: 1.2;
   }
 }
