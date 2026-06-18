@@ -204,6 +204,7 @@ function startGame(botCount) {
     phase: "play",
     pendingDirtyClaim: null,
     pendingToep: null,
+    toepCooldownPlays: -1,
     log: [],
     winnerId: null,
   };
@@ -231,6 +232,7 @@ function beginRound() {
   state.lastTrickWinnerId = null;
   state.pendingDirtyClaim = null;
   state.pendingToep = null;
+  state.toepCooldownPlays = -1;
   state.currentTrick = emptyTrick();
   state.deck = shuffle(createDeck());
 
@@ -287,6 +289,10 @@ function drawCards(count) {
 
 function emptyTrick() {
   return { leadSuit: null, plays: [] };
+}
+
+function totalPlayedCards(game = state) {
+  return (game?.players || []).reduce((total, player) => total + (player.playedCards?.length || 0), 0);
 }
 
 function roundTricks(game = state) {
@@ -594,7 +600,7 @@ function humanToep() {
 
 function initiateToep(actorId, after) {
   const actor = getPlayer(actorId);
-  if (!actor || state.phase !== "play" || state.stake >= 10) return;
+  if (!canPlayerToep(actor)) return;
 
   state.previousStake = state.stake;
   state.stake += 1;
@@ -604,7 +610,7 @@ function initiateToep(actorId, after) {
   const human = getHuman();
   if (human && human.active && human.id !== actorId) {
     state.phase = "toepResponse";
-    state.pendingToep = { actorId, previousStake: state.previousStake, after };
+    state.pendingToep = { actorId, previousStake: state.previousStake, after, playCount: totalPlayedCards() };
     render();
     return;
   }
@@ -637,6 +643,7 @@ function finishToepResponses(_humanCalled, after) {
   const actorId = pending?.actorId;
   const previousStake = pending?.previousStake ?? state.previousStake;
   state.pendingToep = null;
+  state.toepCooldownPlays = totalPlayedCards();
 
   for (const player of activeRoundPlayers()) {
     if (player.id === actorId || player.isHuman) continue;
@@ -1015,14 +1022,14 @@ function renderActionBox() {
     const alreadyResponded = Boolean(state.pendingToep?.responses?.[human?.id]);
     title.textContent = "Toep called";
     if (state.mode === "online" && actor?.id === human?.id) {
-      copy.textContent = "Your Toep is live. Waiting for the table to call or fold.";
+      copy.textContent = "Your Toep is live. The table can join this stake or step out; no one can raise over it.";
     } else if (state.mode === "online" && alreadyResponded) {
       copy.textContent = "Your answer is locked in. Waiting for other players.";
     } else {
-      copy.textContent = `${actor?.name || "A player"} raised the stake to ${state.stake}. Call or fold for ${state.pendingToep?.previousStake || state.previousStake}.`;
+      copy.textContent = `${actor?.name || "A player"} raised the stake to ${state.stake}. Join to stay in, or step out for ${state.pendingToep?.previousStake || state.previousStake}.`;
       stack.append(
-        actionButton(`Call ${state.stake}`, "danger-action", () => humanToepResponse(true)),
-        actionButton(`Fold for ${state.pendingToep?.previousStake || state.previousStake}`, "table-action", () =>
+        actionButton(`Join ${state.stake}`, "primary-action", () => humanToepResponse(true)),
+        actionButton(`Step out ${state.pendingToep?.previousStake || state.previousStake}`, "table-action", () =>
           humanToepResponse(false),
         ),
       );
@@ -1186,6 +1193,7 @@ function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
     phase: "roundOver",
     pendingDirtyClaim: null,
     pendingToep: null,
+    toepCooldownPlays: -1,
     log: ["Online table is full. Cards are being dealt."],
     winnerId: null,
   };
@@ -1236,6 +1244,7 @@ function normalizeOnlineGame(game, uid) {
   }));
   copy.currentTrick = copy.currentTrick || emptyTrick();
   copy.log = copy.log || [];
+  copy.toepCooldownPlays = Number.isFinite(Number(copy.toepCooldownPlays)) ? Number(copy.toepCooldownPlays) : -1;
   return copy;
 }
 
@@ -1294,6 +1303,7 @@ function onlineBeginRound(game) {
   game.lastTrickWinnerId = null;
   game.pendingDirtyClaim = null;
   game.pendingToep = null;
+  game.toepCooldownPlays = -1;
   game.currentTrick = emptyTrick();
   game.deck = shuffle(createDeck());
 
@@ -1395,20 +1405,39 @@ function onlineExchangeHand(game, player) {
 }
 
 function onlineToep(game, player) {
-  if (game.phase !== "play" || !player.active || game.stake >= 10 || onlineActiveRoundPlayers(game).length <= 1) return null;
+  if (!onlineCanPlayerToep(game, player)) return null;
   game.previousStake = game.stake;
   game.stake += 1;
   player.raises = (player.raises || 0) + 1;
-  game.pendingToep = { actorId: player.id, previousStake: game.previousStake, responses: {} };
+  game.pendingToep = {
+    actorId: player.id,
+    previousStake: game.previousStake,
+    responses: {},
+    playCount: totalPlayedCards(game),
+  };
   game.phase = "toepResponse";
   onlineLog(game, `${player.name} calls Toep. Stake rises to ${game.stake}.`);
   return game;
+}
+
+function onlineCanPlayerToep(game, player) {
+  return (
+    game.phase === "play" &&
+    player &&
+    player.active &&
+    player.lives > 0 &&
+    game.stake < 10 &&
+    onlineActiveRoundPlayers(game).length > 1 &&
+    !game.pendingToep &&
+    totalPlayedCards(game) !== game.toepCooldownPlays
+  );
 }
 
 function onlineToepResponse(game, player, call) {
   if (game.phase !== "toepResponse" || !game.pendingToep || !player.active) return null;
   const actor = onlineGetPlayer(game, game.pendingToep.actorId);
   if (!actor || actor.id === player.id) return null;
+  if (game.pendingToep.responses?.[player.id]) return null;
 
   if (call) {
     game.pendingToep.responses[player.id] = true;
@@ -1430,6 +1459,7 @@ function onlineToepResponse(game, player, call) {
   );
   if (waiting.length === 0) {
     game.pendingToep = null;
+    game.toepCooldownPlays = totalPlayedCards(game);
     game.phase = "play";
     if (!onlineGetPlayer(game, game.turnPlayerId)?.active || onlineHasPlayedThisTrick(game, game.turnPlayerId)) {
       game.turnPlayerId = onlineNextUnplayedActiveId(game, actor.id || game.turnPlayerId);
@@ -1626,13 +1656,19 @@ function actionButton(text, className, handler) {
 
 function canHumanToep() {
   const human = getHuman();
+  return canPlayerToep(human);
+}
+
+function canPlayerToep(player) {
   return (
     state?.phase === "play" &&
-    human &&
-    human.active &&
-    human.lives > 0 &&
+    player &&
+    player.active &&
+    player.lives > 0 &&
     state.stake < 10 &&
-    activeRoundPlayers().length > 1
+    activeRoundPlayers().length > 1 &&
+    !state.pendingToep &&
+    totalPlayedCards() !== state.toepCooldownPlays
   );
 }
 
