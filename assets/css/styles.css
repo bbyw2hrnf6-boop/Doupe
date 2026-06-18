@@ -614,6 +614,169 @@ button:not(:disabled):hover {
   min-height: 300px;
 }
 
+.deal-overlay {
+  position: absolute;
+  inset: 14px;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at center, rgba(5, 4, 3, 0.24), rgba(5, 4, 3, 0.78)),
+    rgba(0, 0, 0, 0.16);
+  opacity: 0;
+}
+
+.deal-overlay.dealing {
+  animation: dealOverlay 1850ms ease both;
+}
+
+.dealer-figure {
+  position: relative;
+  display: grid;
+  place-items: center;
+  transform: translateY(-28px);
+}
+
+.dealer-head {
+  width: 44px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(244, 214, 150, 0.42);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.28), transparent 28%),
+    linear-gradient(160deg, #d8b987, #7a4f2f);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
+}
+
+.dealer-jacket {
+  display: grid;
+  place-items: center;
+  min-width: 118px;
+  min-height: 58px;
+  margin-top: -2px;
+  border: 1px solid rgba(244, 214, 150, 0.26);
+  border-radius: 999px 999px 18px 18px;
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(244, 214, 150, 0.45) 49% 51%, transparent 52%),
+    linear-gradient(160deg, #221812, #090705);
+  color: var(--gold-soft);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.dealer-hand {
+  position: absolute;
+  top: 58px;
+  width: 42px;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(160deg, #d7b686, #6d4428);
+  transform-origin: center;
+}
+
+.dealer-hand-left {
+  left: -22px;
+  transform: rotate(24deg);
+}
+
+.dealer-hand-right {
+  right: -22px;
+  transform: rotate(-24deg);
+}
+
+.deal-overlay.dealing .dealer-hand-left {
+  animation: dealerLeft 760ms ease-in-out 2;
+}
+
+.deal-overlay.dealing .dealer-hand-right {
+  animation: dealerRight 760ms ease-in-out 2;
+}
+
+.shuffle-pack {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 86px;
+  height: 118px;
+  transform: translateY(44px);
+}
+
+.shuffle-pack span,
+.deal-cards span {
+  position: absolute;
+  width: 58px;
+  height: 82px;
+  border: 1px solid rgba(126, 80, 34, 0.3);
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(122, 83, 42, 0.11), transparent 2px),
+    repeating-linear-gradient(45deg, rgba(126, 80, 34, 0.08) 0 1px, transparent 1px 7px),
+    linear-gradient(160deg, #fffaf0, #e6d7b9);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
+}
+
+.shuffle-pack span:nth-child(1) {
+  transform: rotate(-12deg) translateX(-10px);
+}
+
+.shuffle-pack span:nth-child(2) {
+  transform: rotate(3deg);
+}
+
+.shuffle-pack span:nth-child(3) {
+  transform: rotate(14deg) translateX(10px);
+}
+
+.deal-overlay.dealing .shuffle-pack {
+  animation: shufflePack 880ms ease-in-out both;
+}
+
+.deal-cards {
+  position: absolute;
+  inset: 0;
+}
+
+.deal-cards span {
+  left: calc(50% - 29px);
+  top: calc(50% + 6px);
+  opacity: 0;
+}
+
+.deal-overlay.dealing .deal-cards span:nth-child(1) {
+  animation: dealCardOne 920ms ease-out 760ms both;
+}
+
+.deal-overlay.dealing .deal-cards span:nth-child(2) {
+  animation: dealCardTwo 920ms ease-out 860ms both;
+}
+
+.deal-overlay.dealing .deal-cards span:nth-child(3) {
+  animation: dealCardThree 920ms ease-out 960ms both;
+}
+
+.deal-overlay.dealing .deal-cards span:nth-child(4) {
+  animation: dealCardFour 920ms ease-out 1060ms both;
+}
+
+.deal-overlay p {
+  position: absolute;
+  left: 50%;
+  bottom: min(12%, 72px);
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(244, 214, 150, 0.18);
+  border-radius: 8px;
+  background: rgba(8, 6, 4, 0.62);
+  color: var(--gold-soft);
+  font-size: 0.82rem;
+  font-weight: 900;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .pot-ring {
   position: absolute;
   display: grid;
@@ -1022,6 +1185,101 @@ button:not(:disabled):hover {
   font-style: italic;
 }
 
+@keyframes dealOverlay {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  12%,
+  84% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+}
+
+@keyframes dealerLeft {
+  0%,
+  100% {
+    transform: rotate(24deg) translateX(0);
+  }
+  50% {
+    transform: rotate(8deg) translateX(24px);
+  }
+}
+
+@keyframes dealerRight {
+  0%,
+  100% {
+    transform: rotate(-24deg) translateX(0);
+  }
+  50% {
+    transform: rotate(-8deg) translateX(-24px);
+  }
+}
+
+@keyframes shufflePack {
+  0% {
+    transform: translateY(44px) rotate(-8deg) scale(0.94);
+  }
+  35% {
+    transform: translateY(44px) rotate(8deg) scale(1.02);
+  }
+  70% {
+    transform: translateY(44px) rotate(-5deg) scale(1);
+  }
+  100% {
+    transform: translateY(44px) rotate(0deg) scale(0.98);
+  }
+}
+
+@keyframes dealCardOne {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.9);
+  }
+  100% {
+    opacity: 0.95;
+    transform: translate(-178px, -92px) rotate(-12deg) scale(0.78);
+  }
+}
+
+@keyframes dealCardTwo {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.9);
+  }
+  100% {
+    opacity: 0.95;
+    transform: translate(178px, -92px) rotate(12deg) scale(0.78);
+  }
+}
+
+@keyframes dealCardThree {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.9);
+  }
+  100% {
+    opacity: 0.95;
+    transform: translate(-154px, 114px) rotate(10deg) scale(0.78);
+  }
+}
+
+@keyframes dealCardFour {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(0.9);
+  }
+  100% {
+    opacity: 0.95;
+    transform: translate(154px, 114px) rotate(-10deg) scale(0.78);
+  }
+}
+
 @media (max-width: 1120px) {
   .game-layout {
     grid-template-columns: 1fr;
@@ -1041,6 +1299,26 @@ button:not(:disabled):hover {
 }
 
 @media (max-width: 780px) {
+  .deal-overlay {
+    inset: 8px;
+  }
+
+  .dealer-figure {
+    transform: translateY(-18px) scale(0.82);
+  }
+
+  .shuffle-pack {
+    transform: translateY(36px) scale(0.78);
+  }
+
+  .deal-overlay p {
+    max-width: calc(100% - 18px);
+    overflow: hidden;
+    padding: 6px 8px;
+    font-size: 0.62rem;
+    text-overflow: ellipsis;
+  }
+
   body.game-active {
     overflow: hidden;
   }
@@ -1643,6 +1921,24 @@ body.game-active .app-shell {
 }
 
 @media (orientation: landscape) and (max-height: 540px) {
+  .deal-overlay {
+    inset: 5px;
+  }
+
+  .dealer-figure {
+    transform: translateY(-12px) scale(0.62);
+  }
+
+  .shuffle-pack {
+    transform: translateY(26px) scale(0.58);
+  }
+
+  .deal-overlay p {
+    bottom: 8px;
+    padding: 4px 6px;
+    font-size: 0.46rem;
+  }
+
   body.game-active {
     overflow: hidden;
   }

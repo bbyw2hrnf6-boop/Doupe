@@ -63,6 +63,7 @@ const DELAYS = {
   botRecover: 800,
   trickSettle: 1450,
 };
+const DEAL_ANIMATION_MS = 1850;
 
 const els = {
   menuScreen: document.querySelector("#menuScreen"),
@@ -83,6 +84,9 @@ const els = {
   scoreboardList: document.querySelector("#scoreboardList"),
   opponentRail: document.querySelector("#opponentRail"),
   trickArea: document.querySelector("#trickArea"),
+  dealOverlay: document.querySelector("#dealOverlay"),
+  dealerName: document.querySelector("#dealerName"),
+  dealText: document.querySelector("#dealText"),
   humanHand: document.querySelector("#humanHand"),
   handHint: document.querySelector("#handHint"),
   actionBox: document.querySelector("#actionBox"),
@@ -100,6 +104,8 @@ const els = {
 let selectedBotCount = 2;
 let state = null;
 let timer = null;
+let dealTimer = null;
+let lastDealAnimationId = null;
 let onlineContext = {
   roomId: null,
   uid: null,
@@ -148,6 +154,8 @@ function showMenu() {
   state = null;
   onlineContext = { roomId: null, uid: null };
   document.body.classList.remove("game-active", "app-fullscreen", "fullscreen-fallback");
+  hideDealAnimation();
+  lastDealAnimationId = null;
   els.menuScreen.classList.remove("hidden");
   els.gameScreen.classList.add("hidden");
   els.endScreen.classList.add("hidden");
@@ -198,6 +206,8 @@ function startGame(botCount) {
     currentTrick: emptyTrick(),
     turnPlayerId: "p0",
     nextLeaderId: "p0",
+    dealerId: null,
+    dealAnimationId: 0,
     lastTrickWinnerId: null,
     dirtyQueue: [],
     dirtyPointer: 0,
@@ -225,6 +235,7 @@ function beginRound() {
   }
 
   clearTimer();
+  clearDealTimer();
   state.round += 1;
   state.stake = 1;
   state.previousStake = 1;
@@ -245,18 +256,16 @@ function beginRound() {
     player.hand = player.eliminated ? [] : drawCards(roundTricks());
   }
 
-  const aliveIds = alivePlayers().map((player) => player.id);
-  if (!aliveIds.includes(state.nextLeaderId)) {
-    state.nextLeaderId = aliveIds[0];
-  }
-
+  assignDealerForRound();
   state.turnPlayerId = state.nextLeaderId;
   state.dirtyQueue = orderedAliveIdsFrom(state.nextLeaderId);
   state.dirtyPointer = 0;
   state.phase = "dirty";
+  state.dealAnimationId += 1;
+  log(`${getPlayer(state.dealerId)?.name || "Dealer"} shuffles and deals. ${getPlayer(state.nextLeaderId)?.name || "Next seat"} starts.`);
   log(`Round ${state.round} starts. Dirty Laundry phase opens.`);
   render();
-  schedule(processDirtyLaundry, DELAYS.dirtyOpen);
+  schedule(processDirtyLaundry, DEAL_ANIMATION_MS + DELAYS.dirtyOpen);
 }
 
 function createDeck() {
@@ -289,6 +298,38 @@ function drawCards(count) {
 
 function emptyTrick() {
   return { leadSuit: null, plays: [] };
+}
+
+function assignDealerForRound() {
+  const alive = alivePlayers();
+  if (alive.length === 0) return;
+
+  if (!state.dealerId) {
+    state.dealerId = previousAliveIdFrom(alive[0].id);
+  } else {
+    state.dealerId = nextAliveIdFrom(state.dealerId);
+  }
+  state.nextLeaderId = nextAliveIdFrom(state.dealerId);
+}
+
+function nextAliveIdFrom(fromId) {
+  return aliveIdFromSeatOffset(state.players, fromId, 1);
+}
+
+function previousAliveIdFrom(fromId) {
+  return aliveIdFromSeatOffset(state.players, fromId, -1);
+}
+
+function aliveIdFromSeatOffset(players, fromId, direction) {
+  const alive = players.filter((player) => player.lives > 0);
+  if (alive.length === 0) return null;
+  const startIndex = Math.max(0, players.findIndex((player) => player.id === fromId));
+  for (let offset = 1; offset <= players.length; offset += 1) {
+    const index = (startIndex + direction * offset + players.length) % players.length;
+    const player = players[index];
+    if (player?.lives > 0) return player.id;
+  }
+  return alive[0].id;
 }
 
 function totalPlayedCards(game = state) {
@@ -730,7 +771,6 @@ function endRoundByLastTrick(winnerId) {
 
 function finishRound(winnerId, chargeActiveLosers) {
   const winner = getPlayer(winnerId);
-  state.nextLeaderId = winnerId;
 
   if (chargeActiveLosers) {
     for (const player of state.players) {
@@ -798,6 +838,7 @@ function render() {
   renderActionBox();
   renderLog();
   renderButtons();
+  renderDealAnimation();
 }
 
 function renderScoreboard() {
@@ -1075,6 +1116,27 @@ function renderButtons() {
   renderFullscreenButton();
 }
 
+function renderDealAnimation() {
+  if (!els.dealOverlay || !state?.dealAnimationId || lastDealAnimationId === state.dealAnimationId) return;
+  lastDealAnimationId = state.dealAnimationId;
+  const dealer = getPlayer(state.dealerId);
+  const starter = getPlayer(state.nextLeaderId);
+  els.dealerName.textContent = dealer?.name || "Dealer";
+  els.dealText.textContent = `${dealer?.name || "Dealer"} deals. ${starter?.name || "Next seat"} starts.`;
+  els.dealOverlay.classList.remove("hidden", "dealing");
+  void els.dealOverlay.offsetWidth;
+  els.dealOverlay.classList.add("dealing");
+  clearDealTimer();
+  dealTimer = window.setTimeout(hideDealAnimation, DEAL_ANIMATION_MS);
+}
+
+function hideDealAnimation() {
+  clearDealTimer();
+  if (!els.dealOverlay) return;
+  els.dealOverlay.classList.add("hidden");
+  els.dealOverlay.classList.remove("dealing");
+}
+
 function setupMobilePanels() {
   if (!els.logPanel) return;
   if (window.matchMedia("(max-width: 780px), (max-height: 540px)").matches) {
@@ -1191,6 +1253,8 @@ function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
     currentTrick: emptyTrick(),
     turnPlayerId: players[0]?.id || "p0",
     nextLeaderId: players[0]?.id || "p0",
+    dealerId: null,
+    dealAnimationId: 0,
     lastTrickWinnerId: null,
     dirtyQueue: [],
     dirtyPointer: 0,
@@ -1252,6 +1316,8 @@ function normalizeOnlineGame(game, uid) {
   copy.log = toList(copy.log);
   copy.pendingToep = normalizePendingResponses(copy.pendingToep);
   copy.pendingDirtyClaim = normalizePendingResponses(copy.pendingDirtyClaim);
+  copy.dealerId = copy.dealerId || null;
+  copy.dealAnimationId = Number(copy.dealAnimationId) || 0;
   copy.toepCooldownPlays = Number.isFinite(Number(copy.toepCooldownPlays)) ? Number(copy.toepCooldownPlays) : -1;
   return copy;
 }
@@ -1324,11 +1390,17 @@ function onlineBeginRound(game) {
     player.hand = player.eliminated ? [] : onlineDrawCards(game, tricks);
   }
 
-  const aliveIds = onlineAlivePlayers(game).map((player) => player.id);
-  if (!aliveIds.includes(game.nextLeaderId)) game.nextLeaderId = aliveIds[0];
+  onlineAssignDealerForRound(game);
   game.turnPlayerId = game.nextLeaderId;
   game.dirtyQueue = onlineOrderedAliveIdsFrom(game, game.nextLeaderId);
   game.dirtyPointer = 0;
+  game.dealAnimationId = (Number(game.dealAnimationId) || 0) + 1;
+  onlineLog(
+    game,
+    `${onlineGetPlayer(game, game.dealerId)?.name || "Dealer"} shuffles and deals. ${
+      onlineGetPlayer(game, game.nextLeaderId)?.name || "Next seat"
+    } starts.`,
+  );
   if (dirtyLaundryEnabled(game)) {
     game.phase = "dirty";
     onlineLog(game, `Round ${game.round} starts. Dirty Laundry phase opens.`);
@@ -1532,7 +1604,6 @@ function onlineEndRoundByFold(game) {
 }
 
 function onlineFinishRound(game, winnerId, chargeActiveLosers) {
-  game.nextLeaderId = winnerId;
   if (chargeActiveLosers) {
     for (const player of game.players) {
       if (player.lives <= 0 || player.id === winnerId || player.folded || !player.active) continue;
@@ -1609,6 +1680,18 @@ function onlineNextUnplayedActiveId(game, afterId) {
     if (activeIds.includes(player.id) && !playedIds.has(player.id)) return player.id;
   }
   return activeIds.find((id) => !playedIds.has(id)) || activeIds[0];
+}
+
+function onlineAssignDealerForRound(game) {
+  const alive = onlineAlivePlayers(game);
+  if (alive.length === 0) return;
+
+  if (!game.dealerId) {
+    game.dealerId = aliveIdFromSeatOffset(game.players, alive[0].id, -1);
+  } else {
+    game.dealerId = aliveIdFromSeatOffset(game.players, game.dealerId, 1);
+  }
+  game.nextLeaderId = aliveIdFromSeatOffset(game.players, game.dealerId, 1);
 }
 
 function onlineRepairTurn(game, preferredId) {
@@ -1906,6 +1989,13 @@ function clearTimer() {
   if (timer) {
     window.clearTimeout(timer);
     timer = null;
+  }
+}
+
+function clearDealTimer() {
+  if (dealTimer) {
+    window.clearTimeout(dealTimer);
+    dealTimer = null;
   }
 }
 

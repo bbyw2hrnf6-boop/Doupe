@@ -30,6 +30,7 @@ Multiplayer uses Firebase from CDN ES modules. No npm, Vite, or build step.
 - Multiplayer supports 2-8 seats. Two-player rooms can choose 4-card or 8-card rounds before the lobby opens.
 - Dirty Laundry stays with 4-card rounds; 8-card duels skip Dirty Laundry and score on the final eighth trick.
 - A pending Toep only allows join or step-out responses. Counter-Toeps are blocked until another card is played.
+- Each round shows a shuffle/deal animation. The dealer rotates, and the next living seat after the dealer starts.
 - Moves are written through Realtime Database transactions.
 
 Current test rules are open. For real public play, restrict room writes to authenticated room players. For cheat-resistant hidden hands, move dealing and move validation to trusted server code such as Cloud Functions.

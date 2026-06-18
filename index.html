@@ -162,6 +162,29 @@
               <div class="trick-area" id="trickArea"></div>
             </div>
 
+            <div class="deal-overlay hidden" id="dealOverlay" aria-live="polite">
+              <div class="dealer-figure">
+                <div class="dealer-head"></div>
+                <div class="dealer-jacket">
+                  <span id="dealerName">Dealer</span>
+                </div>
+                <div class="dealer-hand dealer-hand-left"></div>
+                <div class="dealer-hand dealer-hand-right"></div>
+              </div>
+              <div class="shuffle-pack" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <div class="deal-cards" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <p id="dealText">Shuffling the deck</p>
+            </div>
+
             <div class="hand-zone">
               <div class="hand-label">
                 <span>Your hand</span>
@@ -209,6 +232,7 @@
         <ol>
           <li>Each active player gets four cards from a 32-card deck. Two-player online rooms may choose eight cards.</li>
           <li>Card power is 10, 9, 8, 7, A, K, Q, J. There is no trump.</li>
+          <li>The dealer rotates each round. The next living seat after the dealer starts.</li>
           <li>Dirty Laundry can exchange a weak hand: four A/K/Q/J cards, or three of those plus one 7.</li>
           <li>Players must follow the led suit when possible.</li>
           <li>Only the final trick decides the round winner.</li>
