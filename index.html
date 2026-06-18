@@ -39,20 +39,62 @@
               <p class="panel-kicker">Table setup</p>
               <h2 id="playersHeading">Co-players</h2>
             </div>
-            <div class="player-picker" id="playerPicker" role="group" aria-label="Choose co-players"></div>
-            <div class="setup-row">
-              <span>Human</span>
-              <strong>1</strong>
+            <div class="mode-picker" role="group" aria-label="Choose game mode">
+              <button class="pick-button active" id="soloModeBtn" type="button">Solo bots</button>
+              <button class="pick-button" id="onlineModeBtn" type="button">Online multiplayer</button>
             </div>
-            <div class="setup-row">
-              <span>Bots</span>
-              <strong id="botCountLabel">2</strong>
+
+            <div class="setup-mode" id="localSetup">
+              <div class="player-picker" id="playerPicker" role="group" aria-label="Choose co-players"></div>
+              <div class="setup-row">
+                <span>Human</span>
+                <strong>1</strong>
+              </div>
+              <div class="setup-row">
+                <span>Bots</span>
+                <strong id="botCountLabel">2</strong>
+              </div>
+              <div class="setup-row">
+                <span>Starting lives</span>
+                <strong>10</strong>
+              </div>
+              <button class="primary-action" id="startGameBtn" type="button">Take seat</button>
             </div>
-            <div class="setup-row">
-              <span>Starting lives</span>
-              <strong>10</strong>
+
+            <div class="setup-mode hidden" id="onlineSetup">
+              <label class="field-label" for="playerNameInput">Name at table</label>
+              <input class="text-field" id="playerNameInput" maxlength="18" placeholder="Player" type="text" />
+
+              <div class="setup-row">
+                <span>Seats</span>
+                <select class="select-field" id="onlineSeatSelect" aria-label="Online seats">
+                  <option value="3">3 players</option>
+                  <option value="4" selected>4 players</option>
+                  <option value="5">5 players</option>
+                  <option value="6">6 players</option>
+                  <option value="7">7 players</option>
+                  <option value="8">8 players</option>
+                </select>
+              </div>
+
+              <div class="online-actions">
+                <button class="primary-action" id="createLobbyBtn" type="button">Open lobby</button>
+                <button class="ghost-action" id="refreshLobbiesBtn" type="button">Find lobbies</button>
+              </div>
+
+              <div class="lobby-status" id="onlineStatus">Choose Online multiplayer to connect.</div>
+
+              <div class="lobby-panel hidden" id="lobbyPanel">
+                <div class="section-title">
+                  <span id="lobbyTitle">Lobby</span>
+                  <small id="lobbyCount">0 / 0</small>
+                </div>
+                <div class="lobby-players" id="lobbyPlayers"></div>
+                <button class="ghost-action" id="leaveLobbyBtn" type="button">Leave lobby</button>
+              </div>
+
+              <div class="lobby-list" id="lobbyList" aria-live="polite"></div>
             </div>
-            <button class="primary-action" id="startGameBtn" type="button">Take seat</button>
           </div>
         </div>
       </section>
@@ -162,5 +204,6 @@
     </main>
 
     <script src="assets/js/script.js"></script>
+    <script type="module" src="assets/js/multiplayer.js"></script>
   </body>
 </html>

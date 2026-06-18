@@ -216,6 +216,96 @@ button {
   gap: 8px;
 }
 
+.mode-picker,
+.online-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.setup-mode {
+  display: grid;
+  gap: 14px;
+}
+
+.field-label {
+  color: var(--gold-soft);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.text-field,
+.select-field {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  font: inherit;
+  font-weight: 800;
+  outline: none;
+  padding: 0 12px;
+}
+
+.select-field {
+  color: var(--gold-soft);
+}
+
+.text-field:focus,
+.select-field:focus {
+  border-color: rgba(215, 173, 93, 0.82);
+  box-shadow: 0 0 0 3px rgba(215, 173, 93, 0.12);
+}
+
+.lobby-status {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid rgba(244, 214, 150, 0.12);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.lobby-list,
+.lobby-players {
+  display: grid;
+  gap: 8px;
+}
+
+.lobby-card,
+.lobby-player {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(244, 214, 150, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.lobby-card strong,
+.lobby-player strong {
+  display: block;
+}
+
+.lobby-card small,
+.lobby-player small {
+  color: var(--muted);
+}
+
+.lobby-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(244, 214, 150, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
 .pick-button,
 .primary-action,
 .ghost-action,
@@ -1069,6 +1159,20 @@ body.game-active .app-shell {
 
   .player-picker {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .mode-picker,
+  .online-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-mode {
+    gap: 10px;
+  }
+
+  .text-field,
+  .select-field {
+    min-height: 38px;
   }
 
   .game-layout {

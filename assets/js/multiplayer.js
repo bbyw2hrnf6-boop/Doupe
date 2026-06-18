@@ -1,0 +1,362 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {
+  getDatabase,
+  off,
+  onDisconnect,
+  onValue,
+  push,
+  ref,
+  remove,
+  runTransaction,
+  set,
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD6TkT7W6lf88ndIlnd412l13c08LAvjQo",
+  authDomain: "toupen-multiplayer.firebaseapp.com",
+  databaseURL: "https://toupen-multiplayer-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "toupen-multiplayer",
+  storageBucket: "toupen-multiplayer.firebasestorage.app",
+  messagingSenderId: "564699142731",
+  appId: "1:564699142731:web:f4863313d05070d2ec0bce",
+};
+
+const ROOM_PATH = "toepenRooms";
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const ui = {
+  soloModeBtn: document.querySelector("#soloModeBtn"),
+  onlineModeBtn: document.querySelector("#onlineModeBtn"),
+  localSetup: document.querySelector("#localSetup"),
+  onlineSetup: document.querySelector("#onlineSetup"),
+  playerNameInput: document.querySelector("#playerNameInput"),
+  onlineSeatSelect: document.querySelector("#onlineSeatSelect"),
+  createLobbyBtn: document.querySelector("#createLobbyBtn"),
+  refreshLobbiesBtn: document.querySelector("#refreshLobbiesBtn"),
+  onlineStatus: document.querySelector("#onlineStatus"),
+  lobbyPanel: document.querySelector("#lobbyPanel"),
+  lobbyTitle: document.querySelector("#lobbyTitle"),
+  lobbyCount: document.querySelector("#lobbyCount"),
+  lobbyPlayers: document.querySelector("#lobbyPlayers"),
+  leaveLobbyBtn: document.querySelector("#leaveLobbyBtn"),
+  lobbyList: document.querySelector("#lobbyList"),
+};
+
+let currentUser = null;
+let activeRoomId = null;
+let activeRoomRef = null;
+let roomsListening = false;
+let joinedRoomListening = false;
+
+bootMultiplayer();
+
+function bootMultiplayer() {
+  ui.playerNameInput.value = localStorage.getItem("toepenPlayerName") || defaultPlayerName();
+  ui.soloModeBtn.addEventListener("click", () => setMode("solo"));
+  ui.onlineModeBtn.addEventListener("click", () => setMode("online"));
+  ui.createLobbyBtn.addEventListener("click", createLobby);
+  ui.refreshLobbiesBtn.addEventListener("click", findLobbies);
+  ui.leaveLobbyBtn.addEventListener("click", leaveRoom);
+  ui.playerNameInput.addEventListener("input", () => {
+    localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
+  });
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    if (user && !activeRoomId) {
+      setStatus("Connected as guest. Open a lobby or join one.");
+    }
+  });
+
+  window.ToepenOnline = {
+    sendAction,
+    leaveRoom,
+  };
+}
+
+function setMode(mode) {
+  const online = mode === "online";
+  ui.soloModeBtn.classList.toggle("active", !online);
+  ui.onlineModeBtn.classList.toggle("active", online);
+  ui.soloModeBtn.setAttribute("aria-pressed", String(!online));
+  ui.onlineModeBtn.setAttribute("aria-pressed", String(online));
+  ui.localSetup.classList.toggle("hidden", online);
+  ui.onlineSetup.classList.toggle("hidden", !online);
+
+  if (online) {
+    findLobbies();
+  }
+}
+
+async function ensureAuth() {
+  if (currentUser) return currentUser;
+  setStatus("Connecting to Firebase guest login...");
+  const credential = await signInAnonymously(auth);
+  currentUser = credential.user;
+  return currentUser;
+}
+
+async function findLobbies() {
+  try {
+    await ensureAuth();
+    listenForRooms();
+    setStatus("Looking for open lobbies...");
+  } catch (error) {
+    setStatus(`Could not connect: ${friendlyError(error)}`);
+  }
+}
+
+function listenForRooms() {
+  if (roomsListening) return;
+  roomsListening = true;
+  onValue(ref(db, ROOM_PATH), (snapshot) => {
+    const rooms = snapshot.val() || {};
+    renderLobbyList(
+      Object.values(rooms)
+        .filter((room) => room && room.status === "open")
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+    );
+  });
+}
+
+async function createLobby() {
+  try {
+    const user = await ensureAuth();
+    const roomRef = push(ref(db, ROOM_PATH));
+    const now = Date.now();
+    const room = {
+      id: roomRef.key,
+      code: makeRoomCode(),
+      status: "open",
+      maxPlayers: Number(ui.onlineSeatSelect.value),
+      hostUid: user.uid,
+      createdAt: now,
+      updatedAt: now,
+      players: {
+        [user.uid]: makeLobbyPlayer(user.uid, 0),
+      },
+    };
+    await set(roomRef, room);
+    await onDisconnect(ref(db, `${ROOM_PATH}/${roomRef.key}/players/${user.uid}`)).remove();
+    joinRoom(roomRef.key);
+  } catch (error) {
+    setStatus(`Could not open lobby: ${friendlyError(error)}`);
+  }
+}
+
+async function joinRoom(roomId) {
+  try {
+    const user = await ensureAuth();
+    localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
+    const roomRef = ref(db, `${ROOM_PATH}/${roomId}`);
+    const result = await runTransaction(roomRef, (room) => {
+      if (!room || room.status !== "open") return room;
+      const players = room.players || {};
+      const alreadyInside = Boolean(players[user.uid]);
+      const playerCount = Object.keys(players).length;
+      if (!alreadyInside && playerCount >= room.maxPlayers) return room;
+
+      players[user.uid] = players[user.uid] || makeLobbyPlayer(user.uid, playerCount);
+      players[user.uid].name = cleanName(ui.playerNameInput.value);
+      room.players = players;
+      room.updatedAt = Date.now();
+
+      const roster = rosterFromPlayers(players);
+      if (roster.length >= room.maxPlayers) {
+        room.status = "playing";
+        room.game = window.ToepenGame.createOnlineGame(roster.slice(0, room.maxPlayers), room.id, room.maxPlayers);
+      }
+      return room;
+    });
+
+    const room = result.snapshot.val();
+    if (!room?.players?.[user.uid] && room?.status !== "playing") {
+      setStatus("Lobby is already full or closed.");
+      return;
+    }
+
+    await onDisconnect(ref(db, `${ROOM_PATH}/${roomId}/players/${user.uid}`)).remove();
+    activeRoomId = roomId;
+    activeRoomRef = roomRef;
+    subscribeJoinedRoom(roomId);
+  } catch (error) {
+    setStatus(`Could not join lobby: ${friendlyError(error)}`);
+  }
+}
+
+function subscribeJoinedRoom(roomId) {
+  if (joinedRoomListening && activeRoomRef) off(activeRoomRef);
+  activeRoomRef = ref(db, `${ROOM_PATH}/${roomId}`);
+  joinedRoomListening = true;
+  onValue(activeRoomRef, (snapshot) => {
+    const room = snapshot.val();
+    if (!room) {
+      activeRoomId = null;
+      activeRoomRef = null;
+      hideLobbyPanel();
+      setStatus("Lobby closed.");
+      return;
+    }
+
+    if (room.status === "playing" && room.game) {
+      hideLobbyPanel();
+      window.ToepenGame.loadOnlineGame(room.id, currentUser.uid, room.game, room);
+      return;
+    }
+
+    if (room.status === "finished" && room.game) {
+      hideLobbyPanel();
+      window.ToepenGame.loadOnlineGame(room.id, currentUser.uid, room.game, room);
+      return;
+    }
+
+    renderLobbyPanel(room);
+  });
+}
+
+async function sendAction(action) {
+  if (!activeRoomId || !currentUser) return;
+  const roomRef = ref(db, `${ROOM_PATH}/${activeRoomId}`);
+  await runTransaction(roomRef, (room) => {
+    if (!room?.game || room.status !== "playing") return room;
+    const game = window.ToepenGame.reduceOnlineAction(room.game, {
+      ...action,
+      uid: currentUser.uid,
+      at: Date.now(),
+    });
+    room.game = game;
+    room.updatedAt = Date.now();
+    if (game.phase === "gameOver") room.status = "finished";
+    return room;
+  });
+}
+
+async function leaveRoom() {
+  if (!activeRoomId || !currentUser) return;
+  const roomId = activeRoomId;
+  const uid = currentUser.uid;
+  const roomRef = ref(db, `${ROOM_PATH}/${roomId}`);
+  activeRoomId = null;
+  activeRoomRef = null;
+  joinedRoomListening = false;
+
+  await runTransaction(roomRef, (room) => {
+    if (!room) return room;
+    if (room.status === "open") {
+      delete room.players?.[uid];
+      const remaining = Object.keys(room.players || {});
+      if (remaining.length === 0) return null;
+      if (room.hostUid === uid) room.hostUid = remaining[0];
+      room.updatedAt = Date.now();
+    }
+    return room;
+  }).catch(() => {});
+
+  hideLobbyPanel();
+  setStatus("Left lobby.");
+}
+
+function renderLobbyList(rooms) {
+  ui.lobbyList.innerHTML = "";
+  const openRooms = rooms.filter((room) => {
+    const count = Object.keys(room.players || {}).length;
+    return count < room.maxPlayers;
+  });
+
+  if (!openRooms.length) {
+    const empty = document.createElement("div");
+    empty.className = "lobby-status";
+    empty.textContent = "No open lobbies right now. Open one and wait for players.";
+    ui.lobbyList.append(empty);
+    return;
+  }
+
+  for (const room of openRooms) {
+    const count = Object.keys(room.players || {}).length;
+    const card = document.createElement("div");
+    card.className = "lobby-card";
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = `Room ${room.code || room.id.slice(-4)}`;
+    const meta = document.createElement("small");
+    meta.textContent = `${count} / ${room.maxPlayers} players`;
+    body.append(title, meta);
+
+    const button = document.createElement("button");
+    button.className = "table-action";
+    button.type = "button";
+    button.textContent = "Join";
+    button.addEventListener("click", () => joinRoom(room.id));
+    card.append(body, button);
+    ui.lobbyList.append(card);
+  }
+}
+
+function renderLobbyPanel(room) {
+  const roster = rosterFromPlayers(room.players || {});
+  ui.lobbyPanel.classList.remove("hidden");
+  ui.lobbyTitle.textContent = `Room ${room.code || room.id.slice(-4)}`;
+  ui.lobbyCount.textContent = `${roster.length} / ${room.maxPlayers}`;
+  ui.lobbyPlayers.innerHTML = "";
+  for (const player of roster) {
+    const row = document.createElement("div");
+    row.className = "lobby-player";
+    const body = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = player.name;
+    const meta = document.createElement("small");
+    meta.textContent = player.uid === room.hostUid ? "Host" : "Guest";
+    body.append(name, meta);
+    row.append(body);
+    ui.lobbyPlayers.append(row);
+  }
+  setStatus(roster.length >= room.maxPlayers ? "Lobby full. Dealing..." : "Waiting for more players.");
+}
+
+function hideLobbyPanel() {
+  ui.lobbyPanel.classList.add("hidden");
+  ui.lobbyPlayers.innerHTML = "";
+}
+
+function makeLobbyPlayer(uid, order) {
+  return {
+    uid,
+    name: cleanName(ui.playerNameInput.value),
+    joinedAt: Date.now() + order,
+  };
+}
+
+function rosterFromPlayers(players) {
+  return Object.values(players)
+    .filter(Boolean)
+    .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0))
+    .map((player) => ({
+      uid: player.uid,
+      name: cleanName(player.name),
+      joinedAt: player.joinedAt || 0,
+    }));
+}
+
+function cleanName(value) {
+  const clean = String(value || "").trim().slice(0, 18);
+  return clean || defaultPlayerName();
+}
+
+function defaultPlayerName() {
+  return `Player ${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function makeRoomCode() {
+  return Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+function setStatus(message) {
+  ui.onlineStatus.textContent = message;
+}
+
+function friendlyError(error) {
+  return error?.message?.replace(/^Firebase:\s*/i, "") || "unknown error";
+}

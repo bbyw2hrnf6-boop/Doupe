@@ -100,6 +100,10 @@ const els = {
 let selectedBotCount = 2;
 let state = null;
 let timer = null;
+let onlineContext = {
+  roomId: null,
+  uid: null,
+};
 
 function boot() {
   syncViewportSize();
@@ -138,7 +142,11 @@ function buildPlayerPicker() {
 
 function showMenu() {
   clearTimer();
+  if (state?.mode === "online") {
+    window.ToepenOnline?.leaveRoom?.();
+  }
   state = null;
+  onlineContext = { roomId: null, uid: null };
   document.body.classList.remove("game-active", "app-fullscreen", "fullscreen-fallback");
   els.menuScreen.classList.remove("hidden");
   els.gameScreen.classList.add("hidden");
@@ -208,6 +216,11 @@ function startGame(botCount) {
 }
 
 function beginRound() {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "beginRound" });
+    return;
+  }
+
   clearTimer();
   state.round += 1;
   state.stake = 1;
@@ -309,6 +322,11 @@ function processDirtyLaundry() {
 }
 
 function humanPassDirty() {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "dirtyPass" });
+    return;
+  }
+
   if (!isHumanDirtyTurn()) return;
   log("You keep your hand.");
   state.dirtyPointer += 1;
@@ -317,6 +335,11 @@ function humanPassDirty() {
 }
 
 function humanClaimDirty() {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "dirtyClaim" });
+    return;
+  }
+
   if (!isHumanDirtyTurn()) return;
   const human = getHuman();
   const challenger = chooseBotDirtyChallenger(human);
@@ -345,6 +368,11 @@ function resolveBotDirtyClaim(player) {
 }
 
 function humanDirtyChallenge(challenge) {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "dirtyResponse", challenge });
+    return;
+  }
+
   if (state.phase !== "dirtyChallenge" || !state.pendingDirtyClaim) return;
   finishBotDirtyClaim(challenge);
 }
@@ -424,6 +452,11 @@ function startPlayPhase() {
 }
 
 function playHumanCard(cardId) {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "playCard", cardId });
+    return;
+  }
+
   const human = getHuman();
   if (!human || state.phase !== "play" || state.turnPlayerId !== human.id || !human.active) return;
   const card = human.hand.find((item) => item.id === cardId);
@@ -478,6 +511,7 @@ function completeTrick() {
 
 function maybeBotTurn() {
   if (!state || state.phase !== "play") return;
+  if (state.mode === "online") return;
   if (activeRoundPlayers().length <= 1) {
     endRoundByFold();
     return;
@@ -532,6 +566,11 @@ function chooseBotCard(player) {
 }
 
 function humanToep() {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "toep" });
+    return;
+  }
+
   const human = getHuman();
   if (!canHumanToep()) return;
   initiateToep(human.id, { type: "human" });
@@ -558,6 +597,11 @@ function initiateToep(actorId, after) {
 }
 
 function humanToepResponse(call) {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "toepResponse", call });
+    return;
+  }
+
   if (state.phase !== "toepResponse" || !state.pendingToep) return;
   const pending = state.pendingToep;
   const human = getHuman();
@@ -924,12 +968,20 @@ function renderActionBox() {
 
   if (state.phase === "dirtyChallenge") {
     const claimer = getPlayer(state.pendingDirtyClaim?.claimerId);
+    const human = getHuman();
+    const alreadyResponded = Boolean(state.pendingDirtyClaim?.responses?.[human?.id]);
     title.textContent = "Dirty Laundry claim";
-    copy.textContent = `${claimer?.name || "A player"} asks for new cards. Challenge the claim or let the exchange pass.`;
-    stack.append(
-      actionButton("Challenge", "danger-action", () => humanDirtyChallenge(true)),
-      actionButton("Let it pass", "table-action", () => humanDirtyChallenge(false)),
-    );
+    if (state.mode === "online" && claimer?.id === human?.id) {
+      copy.textContent = "Your claim is on the table. Waiting for the others to challenge or pass.";
+    } else if (state.mode === "online" && alreadyResponded) {
+      copy.textContent = "Your answer is locked in. Waiting for the rest of the table.";
+    } else {
+      copy.textContent = `${claimer?.name || "A player"} asks for new cards. Challenge the claim or let the exchange pass.`;
+      stack.append(
+        actionButton("Challenge", "danger-action", () => humanDirtyChallenge(true)),
+        actionButton("Let it pass", "table-action", () => humanDirtyChallenge(false)),
+      );
+    }
   } else if (isHumanDirtyTurn()) {
     title.textContent = "Your Dirty Laundry";
     copy.textContent = "Claim if your hand is weak, or bluff and dare the table to inspect it.";
@@ -939,14 +991,22 @@ function renderActionBox() {
     );
   } else if (state.phase === "toepResponse") {
     const actor = getPlayer(state.pendingToep?.actorId);
+    const human = getHuman();
+    const alreadyResponded = Boolean(state.pendingToep?.responses?.[human?.id]);
     title.textContent = "Toep called";
-    copy.textContent = `${actor?.name || "A player"} raised the stake to ${state.stake}. Call or fold for ${state.pendingToep?.previousStake || state.previousStake}.`;
-    stack.append(
-      actionButton(`Call ${state.stake}`, "danger-action", () => humanToepResponse(true)),
-      actionButton(`Fold for ${state.pendingToep?.previousStake || state.previousStake}`, "table-action", () =>
-        humanToepResponse(false),
-      ),
-    );
+    if (state.mode === "online" && actor?.id === human?.id) {
+      copy.textContent = "Your Toep is live. Waiting for the table to call or fold.";
+    } else if (state.mode === "online" && alreadyResponded) {
+      copy.textContent = "Your answer is locked in. Waiting for other players.";
+    } else {
+      copy.textContent = `${actor?.name || "A player"} raised the stake to ${state.stake}. Call or fold for ${state.pendingToep?.previousStake || state.previousStake}.`;
+      stack.append(
+        actionButton(`Call ${state.stake}`, "danger-action", () => humanToepResponse(true)),
+        actionButton(`Fold for ${state.pendingToep?.previousStake || state.previousStake}`, "table-action", () =>
+          humanToepResponse(false),
+        ),
+      );
+    }
   } else if (state.phase === "roundOver") {
     title.textContent = "Round settled";
     copy.textContent = "The table is ready for fresh cards.";
@@ -1066,6 +1126,460 @@ function syncViewportSize() {
   const width = viewport?.width || window.innerWidth || document.documentElement.clientWidth;
   document.documentElement.style.setProperty("--app-height", `${height}px`);
   document.documentElement.style.setProperty("--app-width", `${width}px`);
+}
+
+function createOnlineGame(roster, roomId, maxPlayers) {
+  const players = roster.map((seat, index) => ({
+    id: `p${index}`,
+    uid: seat.uid,
+    name: seat.name || `Player ${index + 1}`,
+    isHuman: false,
+    lives: 10,
+    hand: [],
+    active: true,
+    folded: false,
+    eliminated: false,
+    raises: 0,
+    playedCards: [],
+  }));
+
+  const game = {
+    mode: "online",
+    roomId,
+    maxPlayers,
+    players,
+    deck: [],
+    round: 0,
+    stake: 1,
+    previousStake: 1,
+    trickIndex: 0,
+    currentTrick: emptyTrick(),
+    turnPlayerId: players[0]?.id || "p0",
+    nextLeaderId: players[0]?.id || "p0",
+    lastTrickWinnerId: null,
+    dirtyQueue: [],
+    dirtyPointer: 0,
+    phase: "roundOver",
+    pendingDirtyClaim: null,
+    pendingToep: null,
+    log: ["Online table is full. Cards are being dealt."],
+    winnerId: null,
+  };
+
+  return onlineBeginRound(game);
+}
+
+function loadOnlineGame(roomId, uid, game, room = {}) {
+  clearTimer();
+  onlineContext = { roomId, uid };
+  state = normalizeOnlineGame(game, uid);
+  document.body.classList.add("game-active");
+  els.menuScreen.classList.add("hidden");
+
+  if (state.phase === "gameOver") {
+    const winner = getPlayer(state.winnerId);
+    els.gameScreen.classList.add("hidden");
+    els.endScreen.classList.remove("hidden");
+    document.body.classList.remove("game-active");
+    els.endTitle.textContent = `${winner?.name || "No one"} wins`;
+    els.endCopy.textContent = room.code
+      ? `Online room ${room.code} is finished.`
+      : "Online room is finished.";
+    return;
+  }
+
+  els.endScreen.classList.add("hidden");
+  els.gameScreen.classList.remove("hidden");
+  render();
+}
+
+function normalizeOnlineGame(game, uid) {
+  const copy = cloneData(game);
+  copy.mode = "online";
+  copy.localPlayerId = copy.players?.find((player) => player.uid === uid)?.id || null;
+  copy.players = (copy.players || []).map((player) => ({
+    ...player,
+    isHuman: player.uid === uid,
+    hand: player.hand || [],
+    playedCards: player.playedCards || [],
+    active: Boolean(player.active),
+    folded: Boolean(player.folded),
+    eliminated: Boolean(player.eliminated),
+    raises: player.raises || 0,
+  }));
+  copy.currentTrick = copy.currentTrick || emptyTrick();
+  copy.log = copy.log || [];
+  return copy;
+}
+
+function reduceOnlineAction(game, action) {
+  if (!game || !action?.uid) return game;
+  const next = normalizeOnlineGame(game, action.uid);
+  const player = next.players.find((seat) => seat.uid === action.uid);
+  if (!player || player.eliminated) return game;
+
+  if (action.type === "beginRound") {
+    if (next.phase !== "roundOver") return game;
+    return onlineBeginRound(next);
+  }
+
+  if (action.type === "dirtyPass") {
+    if (!onlineIsDirtyTurn(next, player)) return game;
+    onlineLog(next, `${player.name} keeps their hand.`);
+    next.dirtyPointer += 1;
+    onlineAdvanceDirty(next);
+    return next;
+  }
+
+  if (action.type === "dirtyClaim") {
+    if (!onlineIsDirtyTurn(next, player)) return game;
+    next.phase = "dirtyChallenge";
+    next.pendingDirtyClaim = { claimerId: player.id, responses: {} };
+    onlineLog(next, `${player.name} claims Dirty Laundry.`);
+    return next;
+  }
+
+  if (action.type === "dirtyResponse") {
+    return onlineDirtyResponse(next, player, Boolean(action.challenge)) || game;
+  }
+
+  if (action.type === "toep") {
+    return onlineToep(next, player) || game;
+  }
+
+  if (action.type === "toepResponse") {
+    return onlineToepResponse(next, player, Boolean(action.call)) || game;
+  }
+
+  if (action.type === "playCard") {
+    return onlinePlayCard(next, player, action.cardId) || game;
+  }
+
+  return game;
+}
+
+function onlineBeginRound(game) {
+  game.round += 1;
+  game.stake = 1;
+  game.previousStake = 1;
+  game.trickIndex = 0;
+  game.lastTrickWinnerId = null;
+  game.pendingDirtyClaim = null;
+  game.pendingToep = null;
+  game.currentTrick = emptyTrick();
+  game.deck = shuffle(createDeck());
+
+  for (const player of game.players) {
+    player.eliminated = player.lives <= 0;
+    player.active = !player.eliminated;
+    player.folded = false;
+    player.raises = 0;
+    player.playedCards = [];
+    player.hand = player.eliminated ? [] : onlineDrawCards(game, 4);
+  }
+
+  const aliveIds = onlineAlivePlayers(game).map((player) => player.id);
+  if (!aliveIds.includes(game.nextLeaderId)) game.nextLeaderId = aliveIds[0];
+  game.turnPlayerId = game.nextLeaderId;
+  game.dirtyQueue = onlineOrderedAliveIdsFrom(game, game.nextLeaderId);
+  game.dirtyPointer = 0;
+  game.phase = "dirty";
+  onlineLog(game, `Round ${game.round} starts. Dirty Laundry phase opens.`);
+  onlineAdvanceDirty(game);
+  return game;
+}
+
+function onlineDrawCards(game, count) {
+  return game.deck.splice(0, count);
+}
+
+function onlineAdvanceDirty(game) {
+  while (game.dirtyPointer < game.dirtyQueue.length) {
+    const player = onlineGetPlayer(game, game.dirtyQueue[game.dirtyPointer]);
+    if (player && player.lives > 0) {
+      game.phase = "dirty";
+      return;
+    }
+    game.dirtyPointer += 1;
+  }
+  onlineStartPlayPhase(game);
+}
+
+function onlineStartPlayPhase(game) {
+  game.phase = "play";
+  game.trickIndex = 0;
+  game.currentTrick = emptyTrick();
+  game.turnPlayerId = onlineFirstActiveIdFrom(game, game.nextLeaderId);
+  onlineLog(game, "Cards down. The first trick begins.");
+}
+
+function onlineDirtyResponse(game, player, challenge) {
+  if (game.phase !== "dirtyChallenge" || !game.pendingDirtyClaim) return null;
+  const claimer = onlineGetPlayer(game, game.pendingDirtyClaim.claimerId);
+  if (!claimer || claimer.id === player.id || !onlineAlivePlayers(game).some((seat) => seat.id === player.id)) return null;
+
+  if (challenge) {
+    onlineSettleDirtyChallenge(game, claimer, player);
+    game.pendingDirtyClaim = null;
+    game.dirtyPointer += 1;
+    onlineAdvanceDirty(game);
+    return game;
+  }
+
+  game.pendingDirtyClaim.responses = game.pendingDirtyClaim.responses || {};
+  game.pendingDirtyClaim.responses[player.id] = true;
+  const waiting = onlineAlivePlayers(game).filter(
+    (seat) => seat.id !== claimer.id && !game.pendingDirtyClaim.responses[seat.id],
+  );
+  onlineLog(game, `${player.name} lets ${claimer.name}'s Dirty Laundry pass.`);
+  if (waiting.length === 0) {
+    onlineLog(game, `${claimer.name}'s Dirty Laundry passes. New cards hit the felt.`);
+    onlineExchangeHand(game, claimer);
+    game.pendingDirtyClaim = null;
+    game.dirtyPointer += 1;
+    onlineAdvanceDirty(game);
+  }
+  return game;
+}
+
+function onlineSettleDirtyChallenge(game, claimer, challenger) {
+  const valid = isDirtyLaundry(claimer.hand);
+  if (valid) {
+    challenger.lives = Math.max(0, challenger.lives - 1);
+    onlineLog(game, `${challenger.name} challenges ${claimer.name}. Claim is valid; ${challenger.name} loses 1 life.`);
+    onlineExchangeHand(game, claimer);
+  } else {
+    claimer.lives = Math.max(0, claimer.lives - 1);
+    onlineLog(game, `${challenger.name} challenges ${claimer.name}. Bluff caught; ${claimer.name} loses 1 life.`);
+  }
+  onlineMarkEliminations(game);
+}
+
+function onlineExchangeHand(game, player) {
+  game.deck.push(...player.hand);
+  game.deck = shuffle(game.deck);
+  player.hand = onlineDrawCards(game, 4);
+}
+
+function onlineToep(game, player) {
+  if (game.phase !== "play" || !player.active || game.stake >= 10 || onlineActiveRoundPlayers(game).length <= 1) return null;
+  game.previousStake = game.stake;
+  game.stake += 1;
+  player.raises = (player.raises || 0) + 1;
+  game.pendingToep = { actorId: player.id, previousStake: game.previousStake, responses: {} };
+  game.phase = "toepResponse";
+  onlineLog(game, `${player.name} calls Toep. Stake rises to ${game.stake}.`);
+  return game;
+}
+
+function onlineToepResponse(game, player, call) {
+  if (game.phase !== "toepResponse" || !game.pendingToep || !player.active) return null;
+  const actor = onlineGetPlayer(game, game.pendingToep.actorId);
+  if (!actor || actor.id === player.id) return null;
+
+  if (call) {
+    game.pendingToep.responses[player.id] = true;
+    onlineLog(game, `${player.name} calls.`);
+  } else {
+    onlineFoldPlayer(player, game.pendingToep.previousStake);
+    onlineLog(game, `${player.name} folds and pays ${game.pendingToep.previousStake} life.`);
+    onlineMarkEliminations(game);
+  }
+
+  if (onlineActiveRoundPlayers(game).length <= 1) {
+    game.phase = "play";
+    onlineEndRoundByFold(game);
+    return game;
+  }
+
+  const waiting = onlineActiveRoundPlayers(game).filter(
+    (seat) => seat.id !== actor.id && !game.pendingToep.responses[seat.id],
+  );
+  if (waiting.length === 0) {
+    game.pendingToep = null;
+    game.phase = "play";
+    if (!onlineGetPlayer(game, game.turnPlayerId)?.active || onlineHasPlayedThisTrick(game, game.turnPlayerId)) {
+      game.turnPlayerId = onlineNextUnplayedActiveId(game, actor.id || game.turnPlayerId);
+    }
+  }
+  return game;
+}
+
+function onlinePlayCard(game, player, cardId) {
+  if (game.phase !== "play" || game.turnPlayerId !== player.id || !player.active) return null;
+  const card = player.hand.find((item) => item.id === cardId);
+  if (!card || !onlineIsLegalCard(game, player, card)) return null;
+
+  player.hand = player.hand.filter((item) => item.id !== cardId);
+  if (!game.currentTrick.leadSuit) game.currentTrick.leadSuit = card.suit;
+  game.currentTrick.plays.push({ playerId: player.id, card });
+  player.playedCards.push(card);
+  onlineLog(game, `${player.name} plays ${cardLabel(card)}.`);
+
+  if (onlineActiveRoundPlayers(game).length <= 1) {
+    onlineEndRoundByFold(game);
+    return game;
+  }
+
+  if (onlineIsTrickComplete(game)) {
+    onlineCompleteTrick(game);
+    return game;
+  }
+
+  game.turnPlayerId = onlineNextUnplayedActiveId(game, player.id);
+  return game;
+}
+
+function onlineCompleteTrick(game) {
+  const winnerId = onlineTrickWinnerId(game);
+  const winner = onlineGetPlayer(game, winnerId);
+  game.lastTrickWinnerId = winnerId;
+  onlineLog(game, `${winner.name} wins trick ${game.trickIndex + 1}.`);
+  game.trickIndex += 1;
+
+  if (game.trickIndex >= 4) {
+    onlineLog(game, `${winner.name} takes the fourth trick and wins the round.`);
+    onlineFinishRound(game, winnerId, true);
+    return;
+  }
+
+  game.currentTrick = emptyTrick();
+  game.turnPlayerId = winnerId;
+}
+
+function onlineEndRoundByFold(game) {
+  const winner = onlineActiveRoundPlayers(game)[0];
+  if (!winner) {
+    const alive = onlineAlivePlayers(game)[0];
+    onlineFinishGame(game, alive?.id);
+    return;
+  }
+  onlineLog(game, `${winner.name} stands alone and wins the round.`);
+  onlineFinishRound(game, winner.id, false);
+}
+
+function onlineFinishRound(game, winnerId, chargeActiveLosers) {
+  game.nextLeaderId = winnerId;
+  if (chargeActiveLosers) {
+    for (const player of game.players) {
+      if (player.lives <= 0 || player.id === winnerId || player.folded || !player.active) continue;
+      player.lives = Math.max(0, player.lives - game.stake);
+      onlineLog(game, `${player.name} loses ${game.stake} life${game.stake === 1 ? "" : "s"}.`);
+    }
+  }
+  onlineMarkEliminations(game);
+  const alive = onlineAlivePlayers(game);
+  if (alive.length <= 1) {
+    onlineFinishGame(game, alive[0]?.id || winnerId);
+    return;
+  }
+  game.phase = "roundOver";
+}
+
+function onlineFinishGame(game, winnerId) {
+  const winner = onlineGetPlayer(game, winnerId);
+  game.phase = "gameOver";
+  game.winnerId = winner?.id || null;
+  onlineLog(game, `${winner?.name || "The table"} wins the match.`);
+}
+
+function onlineMarkEliminations(game) {
+  for (const player of game.players) {
+    if (player.lives <= 0) {
+      player.lives = 0;
+      player.active = false;
+      player.eliminated = true;
+      player.hand = [];
+    }
+  }
+}
+
+function onlineFoldPlayer(player, penalty) {
+  player.lives = Math.max(0, player.lives - penalty);
+  player.active = false;
+  player.folded = true;
+  if (player.lives <= 0) player.eliminated = true;
+}
+
+function onlineLegalCards(game, player) {
+  if (!game.currentTrick.leadSuit) return [...player.hand];
+  const suited = player.hand.filter((card) => card.suit === game.currentTrick.leadSuit);
+  return suited.length > 0 ? suited : [...player.hand];
+}
+
+function onlineIsLegalCard(game, player, card) {
+  return onlineLegalCards(game, player).some((legal) => legal.id === card.id);
+}
+
+function onlineIsTrickComplete(game) {
+  const activeIds = onlineActiveRoundPlayers(game).map((player) => player.id);
+  const playedActiveIds = game.currentTrick.plays
+    .filter((play) => activeIds.includes(play.playerId))
+    .map((play) => play.playerId);
+  return activeIds.every((id) => playedActiveIds.includes(id));
+}
+
+function onlineTrickWinnerId(game) {
+  const activeIds = new Set(onlineActiveRoundPlayers(game).map((player) => player.id));
+  const candidates = game.currentTrick.plays.filter(
+    (play) => activeIds.has(play.playerId) && play.card.suit === game.currentTrick.leadSuit,
+  );
+  return candidates.reduce((best, play) => (play.card.power > best.card.power ? play : best), candidates[0]).playerId;
+}
+
+function onlineNextUnplayedActiveId(game, afterId) {
+  const activeIds = onlineActiveRoundPlayers(game).map((player) => player.id);
+  const playedIds = new Set(game.currentTrick.plays.map((play) => play.playerId));
+  const start = Math.max(0, game.players.findIndex((player) => player.id === afterId));
+  for (let offset = 1; offset <= game.players.length; offset += 1) {
+    const player = game.players[(start + offset) % game.players.length];
+    if (activeIds.includes(player.id) && !playedIds.has(player.id)) return player.id;
+  }
+  return activeIds.find((id) => !playedIds.has(id)) || activeIds[0];
+}
+
+function onlineFirstActiveIdFrom(game, fromId) {
+  const activeIds = onlineActiveRoundPlayers(game).map((player) => player.id);
+  return activeIds.includes(fromId) ? fromId : activeIds[0];
+}
+
+function onlineOrderedAliveIdsFrom(game, fromId) {
+  const aliveIds = onlineAlivePlayers(game).map((player) => player.id);
+  const start = Math.max(0, game.players.findIndex((player) => player.id === fromId));
+  const ordered = [];
+  for (let offset = 0; offset < game.players.length; offset += 1) {
+    const player = game.players[(start + offset) % game.players.length];
+    if (aliveIds.includes(player.id)) ordered.push(player.id);
+  }
+  return ordered;
+}
+
+function onlineHasPlayedThisTrick(game, playerId) {
+  return game.currentTrick.plays.some((play) => play.playerId === playerId);
+}
+
+function onlineIsDirtyTurn(game, player) {
+  return game.phase === "dirty" && game.dirtyQueue[game.dirtyPointer] === player.id;
+}
+
+function onlineActiveRoundPlayers(game) {
+  return game.players.filter((player) => player.lives > 0 && player.active && !player.folded);
+}
+
+function onlineAlivePlayers(game) {
+  return game.players.filter((player) => player.lives > 0);
+}
+
+function onlineGetPlayer(game, id) {
+  return game.players.find((player) => player.id === id);
+}
+
+function onlineLog(game, message) {
+  game.log = [message, ...(game.log || [])].slice(0, 40);
+}
+
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function actionButton(text, className, handler) {
@@ -1204,6 +1718,9 @@ function getPlayer(id) {
 }
 
 function getHuman() {
+  if (state?.mode === "online") {
+    return state.players.find((player) => player.uid === onlineContext.uid || player.id === state.localPlayerId);
+  }
   return state?.players.find((player) => player.isHuman);
 }
 
@@ -1250,5 +1767,12 @@ function clearTimer() {
     timer = null;
   }
 }
+
+window.ToepenGame = {
+  createOnlineGame,
+  loadOnlineGame,
+  reduceOnlineAction,
+  showMenu,
+};
 
 boot();
