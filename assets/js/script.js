@@ -9,6 +9,15 @@ const RANKS = ["7", "8", "9", "10", "J", "Q", "K", "A"];
 const POWER = { "10": 8, "9": 7, "8": 6, "7": 5, A: 4, K: 3, Q: 2, J: 1 };
 const DIRTY_CORE = new Set(["A", "K", "Q", "J"]);
 const BOT_NAMES = ["Rook", "Sable", "Vesper", "Marlow", "Onyx", "Sterling", "Crown"];
+const DELAYS = {
+  dirtyOpen: 950,
+  dirtyDecision: 1150,
+  afterHumanChoice: 750,
+  afterClaim: 900,
+  botThink: 1250,
+  botRecover: 800,
+  trickSettle: 1450,
+};
 
 const els = {
   menuScreen: document.querySelector("#menuScreen"),
@@ -19,6 +28,7 @@ const els = {
   startGameBtn: document.querySelector("#startGameBtn"),
   playAgainBtn: document.querySelector("#playAgainBtn"),
   newGameBtn: document.querySelector("#newGameBtn"),
+  fullscreenBtn: document.querySelector("#fullscreenBtn"),
   roundTitle: document.querySelector("#roundTitle"),
   stakeValue: document.querySelector("#stakeValue"),
   trickValue: document.querySelector("#trickValue"),
@@ -37,6 +47,7 @@ const els = {
   rulesDialog: document.querySelector("#rulesDialog"),
   closeRulesBtn: document.querySelector("#closeRulesBtn"),
   logList: document.querySelector("#logList"),
+  logPanel: document.querySelector("#logPanel"),
   endTitle: document.querySelector("#endTitle"),
   endCopy: document.querySelector("#endCopy"),
 };
@@ -50,9 +61,12 @@ function boot() {
   els.startGameBtn.addEventListener("click", () => startGame(selectedBotCount));
   els.playAgainBtn.addEventListener("click", showMenu);
   els.newGameBtn.addEventListener("click", showMenu);
+  els.fullscreenBtn.addEventListener("click", toggleFullscreen);
   els.toepBtn.addEventListener("click", () => humanToep());
   els.rulesBtn.addEventListener("click", () => els.rulesDialog.showModal());
   els.closeRulesBtn.addEventListener("click", () => els.rulesDialog.close());
+  document.addEventListener("fullscreenchange", renderFullscreenButton);
+  document.addEventListener("webkitfullscreenchange", renderFullscreenButton);
   showMenu();
 }
 
@@ -76,9 +90,11 @@ function buildPlayerPicker() {
 function showMenu() {
   clearTimer();
   state = null;
+  document.body.classList.remove("game-active");
   els.menuScreen.classList.remove("hidden");
   els.gameScreen.classList.add("hidden");
   els.endScreen.classList.add("hidden");
+  renderFullscreenButton();
 }
 
 function startGame(botCount) {
@@ -94,6 +110,7 @@ function startGame(botCount) {
       folded: false,
       eliminated: false,
       raises: 0,
+      playedCards: [],
     },
   ];
 
@@ -108,6 +125,7 @@ function startGame(botCount) {
       folded: false,
       eliminated: false,
       raises: 0,
+      playedCards: [],
     });
   }
 
@@ -134,6 +152,8 @@ function startGame(botCount) {
   els.menuScreen.classList.add("hidden");
   els.endScreen.classList.add("hidden");
   els.gameScreen.classList.remove("hidden");
+  document.body.classList.add("game-active");
+  setupMobilePanels();
   log("Welcome to the table. Ten lives each. Fourth trick rules all.");
   beginRound();
 }
@@ -155,6 +175,7 @@ function beginRound() {
     player.active = !player.eliminated;
     player.folded = false;
     player.raises = 0;
+    player.playedCards = [];
     player.hand = player.eliminated ? [] : drawCards(4);
   }
 
@@ -169,7 +190,7 @@ function beginRound() {
   state.phase = "dirty";
   log(`Round ${state.round} starts. Dirty Laundry phase opens.`);
   render();
-  schedule(processDirtyLaundry, 550);
+  schedule(processDirtyLaundry, DELAYS.dirtyOpen);
 }
 
 function createDeck() {
@@ -228,7 +249,7 @@ function processDirtyLaundry() {
         log(`${player.name} keeps their hand.`);
         state.dirtyPointer += 1;
         render();
-        schedule(processDirtyLaundry, 520);
+        schedule(processDirtyLaundry, DELAYS.dirtyDecision);
       }
       return;
     }
@@ -243,7 +264,7 @@ function humanPassDirty() {
   log("You keep your hand.");
   state.dirtyPointer += 1;
   render();
-  schedule(processDirtyLaundry, 250);
+  schedule(processDirtyLaundry, DELAYS.afterHumanChoice);
 }
 
 function humanClaimDirty() {
@@ -258,7 +279,7 @@ function humanClaimDirty() {
     state.dirtyPointer += 1;
   }
   render();
-  schedule(processDirtyLaundry, 400);
+  schedule(processDirtyLaundry, DELAYS.afterClaim);
 }
 
 function resolveBotDirtyClaim(player) {
@@ -299,7 +320,7 @@ function finishBotDirtyClaim(humanChallenges) {
 
   state.dirtyPointer += 1;
   render();
-  schedule(processDirtyLaundry, 450);
+  schedule(processDirtyLaundry, DELAYS.afterClaim);
 }
 
 function settleDirtyChallenge(claimer, challenger) {
@@ -350,7 +371,7 @@ function startPlayPhase() {
   state.turnPlayerId = firstActiveIdFrom(state.nextLeaderId);
   log("Cards down. The first trick begins.");
   render();
-  schedule(maybeBotTurn, 500);
+  schedule(maybeBotTurn, DELAYS.botThink);
 }
 
 function playHumanCard(cardId) {
@@ -368,6 +389,7 @@ function playCard(player, card) {
   }
 
   state.currentTrick.plays.push({ playerId: player.id, card });
+  player.playedCards.push(card);
   log(`${player.name} plays ${cardLabel(card)}.`);
   render();
 
@@ -377,13 +399,13 @@ function playCard(player, card) {
   }
 
   if (isTrickComplete()) {
-    schedule(completeTrick, 650);
+    schedule(completeTrick, DELAYS.trickSettle);
     return;
   }
 
   state.turnPlayerId = nextUnplayedActiveId(player.id);
   render();
-  schedule(maybeBotTurn, 500);
+  schedule(maybeBotTurn, DELAYS.botThink);
 }
 
 function completeTrick() {
@@ -402,7 +424,7 @@ function completeTrick() {
   state.currentTrick = emptyTrick();
   state.turnPlayerId = winnerId;
   render();
-  schedule(maybeBotTurn, 650);
+  schedule(maybeBotTurn, DELAYS.botThink);
 }
 
 function maybeBotTurn() {
@@ -416,7 +438,7 @@ function maybeBotTurn() {
   if (!player || !player.active || player.lives <= 0) {
     state.turnPlayerId = nextUnplayedActiveId(state.turnPlayerId);
     render();
-    schedule(maybeBotTurn, 350);
+    schedule(maybeBotTurn, DELAYS.botRecover);
     return;
   }
 
@@ -528,7 +550,7 @@ function finishToepResponses(_humanCalled, after) {
   state.phase = "play";
   if (isTrickComplete()) {
     render();
-    schedule(completeTrick, 500);
+    schedule(completeTrick, DELAYS.trickSettle);
     return;
   }
 
@@ -539,7 +561,7 @@ function finishToepResponses(_humanCalled, after) {
 
   render();
   if (after?.type === "botTurn" || !getPlayer(state.turnPlayerId)?.isHuman) {
-    schedule(maybeBotTurn, 500);
+    schedule(maybeBotTurn, DELAYS.botThink);
   }
 }
 
@@ -618,6 +640,7 @@ function finishGame(winnerId) {
 
   els.gameScreen.classList.add("hidden");
   els.endScreen.classList.remove("hidden");
+  document.body.classList.remove("game-active");
   els.endTitle.textContent = `${winner?.name || "No one"} wins`;
   els.endCopy.textContent =
     winner?.isHuman
@@ -713,22 +736,37 @@ function renderOpponents() {
 
 function renderTrick() {
   els.trickArea.innerHTML = "";
-  if (state.currentTrick.plays.length === 0) {
+  const tablePlayers = state.players.filter((player) => player.lives > 0 || player.playedCards?.length);
+  const hasPlayedCards = tablePlayers.some((player) => player.playedCards?.length);
+
+  if (!hasPlayedCards) {
     const empty = document.createElement("p");
     empty.className = "empty-note";
-    empty.textContent = state.phase === "dirty" ? "Dirty Laundry claims happen before cards land." : "No cards in this trick yet.";
+    empty.textContent = state.phase === "dirty" ? "Dirty Laundry claims happen before cards land." : "No played cards yet.";
     els.trickArea.append(empty);
     return;
   }
 
-  for (const play of state.currentTrick.plays) {
+  const currentWinning = currentWinningPlay();
+  for (const player of tablePlayers) {
     const wrap = document.createElement("div");
-    wrap.className = "played-card";
-    wrap.append(renderCard(play.card, { small: false }));
+    wrap.className = "played-stack";
+    if (currentWinning?.playerId === player.id) wrap.classList.add("winning");
+
+    const pile = document.createElement("div");
+    pile.className = "pile-cards";
+    const played = player.playedCards || [];
+    played.forEach((card, index) => {
+      const cardEl = renderCard(card);
+      cardEl.classList.add("pile-card");
+      cardEl.style.setProperty("--i", index);
+      pile.append(cardEl);
+    });
+
     const byline = document.createElement("div");
     byline.className = "byline";
-    byline.textContent = getPlayer(play.playerId)?.name || "Player";
-    wrap.append(byline);
+    byline.textContent = played.length ? `${player.name} (${played.length})` : player.name;
+    wrap.append(pile, byline);
     els.trickArea.append(wrap);
   }
 }
@@ -853,6 +891,59 @@ function renderLog() {
 
 function renderButtons() {
   els.toepBtn.disabled = !canHumanToep();
+  renderFullscreenButton();
+}
+
+function setupMobilePanels() {
+  if (!els.logPanel) return;
+  if (window.matchMedia("(max-width: 780px), (max-height: 540px)").matches) {
+    els.logPanel.open = false;
+  } else {
+    els.logPanel.open = true;
+  }
+}
+
+async function toggleFullscreen() {
+  try {
+    if (!getFullscreenElement()) {
+      await requestGameFullscreen();
+      await lockLandscapeWhenPossible();
+    } else {
+      await exitGameFullscreen();
+    }
+  } catch (_error) {
+    renderFullscreenButton();
+  }
+}
+
+function getFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function requestGameFullscreen() {
+  const request = els.gameScreen.requestFullscreen || els.gameScreen.webkitRequestFullscreen;
+  return request ? request.call(els.gameScreen) : Promise.reject(new Error("Fullscreen unavailable"));
+}
+
+function exitGameFullscreen() {
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  return exit ? exit.call(document) : Promise.resolve();
+}
+
+async function lockLandscapeWhenPossible() {
+  const orientation = window.screen?.orientation;
+  if (!orientation?.lock) return;
+
+  try {
+    await orientation.lock("landscape");
+  } catch (_error) {
+    // Some browsers allow fullscreen but refuse orientation lock.
+  }
+}
+
+function renderFullscreenButton() {
+  if (!els.fullscreenBtn) return;
+  els.fullscreenBtn.textContent = getFullscreenElement() ? "Exit full" : "Fullscreen";
 }
 
 function actionButton(text, className, handler) {

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="A luxury-styled browser implementation of Toepen with bot opponents, lives, Dirty Laundry, Toep raises, and fourth-trick scoring."
@@ -73,7 +73,10 @@
               <strong id="leadValue">-</strong>
             </div>
           </div>
-          <button class="ghost-action" id="newGameBtn" type="button">New table</button>
+          <div class="header-actions">
+            <button class="ghost-action" id="fullscreenBtn" type="button">Fullscreen</button>
+            <button class="ghost-action" id="newGameBtn" type="button">New table</button>
+          </div>
         </header>
 
         <div class="game-layout">
@@ -117,13 +120,13 @@
               <button class="danger-action" id="toepBtn" type="button">Toep!</button>
               <button class="ghost-action" id="rulesBtn" type="button">Rules</button>
             </div>
-            <div class="log-panel" aria-live="polite">
-              <div class="section-title">
+            <details class="log-panel" id="logPanel" open>
+              <summary class="section-title">
                 <span>Table log</span>
                 <small>latest first</small>
-              </div>
+              </summary>
               <div class="log-list" id="logList"></div>
-            </div>
+            </details>
           </aside>
         </div>
       </section>
