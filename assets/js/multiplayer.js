@@ -12,20 +12,12 @@ import {
   set,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyD6TkT7W6lf88ndIlnd412l13c08LAvjQo",
-  authDomain: "toupen-multiplayer.firebaseapp.com",
-  databaseURL: "https://toupen-multiplayer-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "toupen-multiplayer",
-  storageBucket: "toupen-multiplayer.firebasestorage.app",
-  messagingSenderId: "564699142731",
-  appId: "1:564699142731:web:f4863313d05070d2ec0bce",
-};
+const firebaseConfig = window.TOEPEN_FIREBASE_CONFIG;
 
 const ROOM_PATH = "toepenRooms";
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getDatabase(app);
+let app = null;
+let auth = null;
+let db = null;
 
 const ui = {
   soloModeBtn: document.querySelector("#soloModeBtn"),
@@ -54,6 +46,16 @@ let joinedRoomListening = false;
 bootMultiplayer();
 
 function bootMultiplayer() {
+  if (!isFirebaseConfigUsable()) {
+    setMode("solo");
+    setStatus("Firebase config missing or invalid. Add the current Firebase Web apiKey in assets/js/firebase-config.js.");
+    return;
+  }
+
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getDatabase(app);
+
   ui.playerNameInput.value = localStorage.getItem("toepenPlayerName") || defaultPlayerName();
   ui.soloModeBtn.addEventListener("click", () => setMode("solo"));
   ui.onlineModeBtn.addEventListener("click", () => setMode("online"));
@@ -358,5 +360,27 @@ function setStatus(message) {
 }
 
 function friendlyError(error) {
-  return error?.message?.replace(/^Firebase:\s*/i, "") || "unknown error";
+  const code = error?.code || "";
+  if (code === "auth/api-key-not-valid" || code === "auth/invalid-api-key") {
+    return "Firebase apiKey is invalid. Copy the current Web App apiKey from Firebase Console > Project settings > Your apps.";
+  }
+  if (code === "auth/network-request-failed") {
+    return "network blocked Firebase Auth. Check internet and allowed domains.";
+  }
+  if (code === "auth/unauthorized-domain") {
+    return "GitHub Pages domain is not authorized in Firebase Auth. Add bbyw2hrnf6-boop.github.io in Authentication > Settings > Authorized domains.";
+  }
+  return error?.message?.replace(/^Firebase:\s*/i, "").replace(/\.$/, "") || "unknown error";
+}
+
+function isFirebaseConfigUsable() {
+  return Boolean(
+    firebaseConfig &&
+      firebaseConfig.apiKey &&
+      firebaseConfig.apiKey.startsWith("AIza") &&
+      firebaseConfig.authDomain &&
+      firebaseConfig.databaseURL &&
+      firebaseConfig.projectId &&
+      firebaseConfig.appId,
+  );
 }
