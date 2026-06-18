@@ -25,6 +25,8 @@ const ui = {
   localSetup: document.querySelector("#localSetup"),
   onlineSetup: document.querySelector("#onlineSetup"),
   playerNameInput: document.querySelector("#playerNameInput"),
+  randomNameBtn: document.querySelector("#randomNameBtn"),
+  lobbyNameInput: document.querySelector("#lobbyNameInput"),
   onlineSeatSelect: document.querySelector("#onlineSeatSelect"),
   onlineHandSizeRow: document.querySelector("#onlineHandSizeRow"),
   onlineHandSizeSelect: document.querySelector("#onlineHandSizeSelect"),
@@ -58,15 +60,20 @@ function bootMultiplayer() {
   auth = getAuth(app);
   db = getDatabase(app);
 
-  ui.playerNameInput.value = localStorage.getItem("toepenPlayerName") || defaultPlayerName();
+  ui.playerNameInput.value = localStorage.getItem("toepenPlayerName") || randomNickname();
+  ui.lobbyNameInput.value = localStorage.getItem("toepenLobbyName") || "";
   ui.soloModeBtn.addEventListener("click", () => setMode("solo"));
   ui.onlineModeBtn.addEventListener("click", () => setMode("online"));
   ui.createLobbyBtn.addEventListener("click", createLobby);
   ui.refreshLobbiesBtn.addEventListener("click", findLobbies);
   ui.leaveLobbyBtn.addEventListener("click", leaveRoom);
   ui.onlineSeatSelect.addEventListener("change", syncOnlineHandSize);
+  ui.randomNameBtn.addEventListener("click", randomizePlayerName);
   ui.playerNameInput.addEventListener("input", () => {
     localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
+  });
+  ui.lobbyNameInput.addEventListener("input", () => {
+    localStorage.setItem("toepenLobbyName", cleanLobbyName(ui.lobbyNameInput.value));
   });
   syncOnlineHandSize();
 
@@ -135,9 +142,11 @@ async function createLobby() {
     const now = Date.now();
     const maxPlayers = Number(ui.onlineSeatSelect.value);
     const handSize = selectedOnlineHandSize(maxPlayers);
+    const code = makeRoomCode();
     const room = {
       id: roomRef.key,
-      code: makeRoomCode(),
+      code,
+      lobbyName: cleanLobbyName(ui.lobbyNameInput.value) || `Table ${code}`,
       status: "open",
       maxPlayers,
       handSize,
@@ -294,7 +303,7 @@ function renderLobbyList(rooms) {
     card.className = "lobby-card";
     const body = document.createElement("div");
     const title = document.createElement("strong");
-    title.textContent = `Room ${room.code || room.id.slice(-4)}`;
+    title.textContent = roomTitle(room);
     const meta = document.createElement("small");
     meta.textContent = `${count} / ${room.maxPlayers} players · ${roomHandText(room)}`;
     body.append(title, meta);
@@ -312,7 +321,7 @@ function renderLobbyList(rooms) {
 function renderLobbyPanel(room) {
   const roster = rosterFromPlayers(room.players || {});
   ui.lobbyPanel.classList.remove("hidden");
-  ui.lobbyTitle.textContent = `Room ${room.code || room.id.slice(-4)}`;
+  ui.lobbyTitle.textContent = roomTitle(room);
   ui.lobbyCount.textContent = `${roster.length} / ${room.maxPlayers}`;
   ui.lobbyPlayers.innerHTML = "";
   for (const player of roster) {
@@ -347,6 +356,11 @@ function makeLobbyPlayer(uid, order) {
   };
 }
 
+function randomizePlayerName() {
+  ui.playerNameInput.value = randomNickname();
+  localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
+}
+
 function syncOnlineHandSize() {
   const isDuel = Number(ui.onlineSeatSelect.value) === 2;
   ui.onlineHandSizeRow?.classList.toggle("hidden", !isDuel);
@@ -360,6 +374,10 @@ function selectedOnlineHandSize(maxPlayers) {
 function roomHandText(room) {
   const cards = Number(room?.handSize) === 8 ? 8 : 4;
   return `${cards} card${cards === 1 ? "" : "s"} each`;
+}
+
+function roomTitle(room) {
+  return cleanLobbyName(room?.lobbyName) || `Room ${room?.code || room?.id?.slice(-4) || "OPEN"}`;
 }
 
 function rosterFromPlayers(players) {
@@ -378,8 +396,22 @@ function cleanName(value) {
   return clean || defaultPlayerName();
 }
 
+function cleanLobbyName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 24);
+}
+
 function defaultPlayerName() {
   return `Player ${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function randomNickname() {
+  const first = ["Velvet", "Royal", "Lucky", "Golden", "Silent", "Sharp", "Midnight", "Diamond", "Sable", "Crown"];
+  const second = ["Ace", "Ten", "Jack", "Bluff", "Dealer", "Spade", "Heart", "King", "Queen", "Card"];
+  return cleanName(`${pick(first)} ${pick(second)}`);
+}
+
+function pick(items) {
+  return items[Math.floor(Math.random() * items.length)];
 }
 
 function makeRoomCode() {

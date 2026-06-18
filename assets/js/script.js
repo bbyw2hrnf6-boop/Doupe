@@ -610,7 +610,13 @@ function initiateToep(actorId, after) {
   const human = getHuman();
   if (human && human.active && human.id !== actorId) {
     state.phase = "toepResponse";
-    state.pendingToep = { actorId, previousStake: state.previousStake, after, playCount: totalPlayedCards() };
+    state.pendingToep = {
+      actorId,
+      previousStake: state.previousStake,
+      after,
+      playCount: totalPlayedCards(),
+      resumeTurnPlayerId: state.turnPlayerId,
+    };
     render();
     return;
   }
@@ -642,6 +648,7 @@ function finishToepResponses(_humanCalled, after) {
   const pending = state.pendingToep;
   const actorId = pending?.actorId;
   const previousStake = pending?.previousStake ?? state.previousStake;
+  const resumeTurnPlayerId = pending?.resumeTurnPlayerId || state.turnPlayerId;
   state.pendingToep = null;
   state.toepCooldownPlays = totalPlayedCards();
 
@@ -670,10 +677,7 @@ function finishToepResponses(_humanCalled, after) {
     return;
   }
 
-  if (!getPlayer(state.turnPlayerId)?.active || hasPlayedThisTrick(state.turnPlayerId)) {
-    const nextId = nextUnplayedActiveId(actorId || state.turnPlayerId);
-    if (nextId) state.turnPlayerId = nextId;
-  }
+  repairTurn(resumeTurnPlayerId || actorId || state.turnPlayerId);
 
   render();
   if (after?.type === "botTurn" || !getPlayer(state.turnPlayerId)?.isHuman) {
@@ -1414,6 +1418,7 @@ function onlineToep(game, player) {
     previousStake: game.previousStake,
     responses: {},
     playCount: totalPlayedCards(game),
+    resumeTurnPlayerId: game.turnPlayerId,
   };
   game.phase = "toepResponse";
   onlineLog(game, `${player.name} calls Toep. Stake rises to ${game.stake}.`);
@@ -1435,16 +1440,18 @@ function onlineCanPlayerToep(game, player) {
 
 function onlineToepResponse(game, player, call) {
   if (game.phase !== "toepResponse" || !game.pendingToep || !player.active) return null;
-  const actor = onlineGetPlayer(game, game.pendingToep.actorId);
+  const pending = game.pendingToep;
+  const actor = onlineGetPlayer(game, pending.actorId);
   if (!actor || actor.id === player.id) return null;
-  if (game.pendingToep.responses?.[player.id]) return null;
+  pending.responses = pending.responses || {};
+  if (pending.responses[player.id]) return null;
 
   if (call) {
-    game.pendingToep.responses[player.id] = true;
+    pending.responses[player.id] = true;
     onlineLog(game, `${player.name} calls.`);
   } else {
-    onlineFoldPlayer(player, game.pendingToep.previousStake);
-    onlineLog(game, `${player.name} folds and pays ${game.pendingToep.previousStake} life.`);
+    onlineFoldPlayer(player, pending.previousStake);
+    onlineLog(game, `${player.name} folds and pays ${pending.previousStake} life.`);
     onlineMarkEliminations(game);
   }
 
@@ -1455,20 +1462,19 @@ function onlineToepResponse(game, player, call) {
   }
 
   const waiting = onlineActiveRoundPlayers(game).filter(
-    (seat) => seat.id !== actor.id && !game.pendingToep.responses[seat.id],
+    (seat) => seat.id !== actor.id && !pending.responses[seat.id],
   );
   if (waiting.length === 0) {
     game.pendingToep = null;
     game.toepCooldownPlays = totalPlayedCards(game);
     game.phase = "play";
-    if (!onlineGetPlayer(game, game.turnPlayerId)?.active || onlineHasPlayedThisTrick(game, game.turnPlayerId)) {
-      game.turnPlayerId = onlineNextUnplayedActiveId(game, actor.id || game.turnPlayerId);
-    }
+    onlineRepairTurn(game, pending.resumeTurnPlayerId || game.turnPlayerId);
   }
   return game;
 }
 
 function onlinePlayCard(game, player, cardId) {
+  onlineRepairTurn(game, player.id);
   if (game.phase !== "play" || game.turnPlayerId !== player.id || !player.active) return null;
   const card = player.hand.find((item) => item.id === cardId);
   if (!card || !onlineIsLegalCard(game, player, card)) return null;
@@ -1599,6 +1605,25 @@ function onlineNextUnplayedActiveId(game, afterId) {
     if (activeIds.includes(player.id) && !playedIds.has(player.id)) return player.id;
   }
   return activeIds.find((id) => !playedIds.has(id)) || activeIds[0];
+}
+
+function onlineRepairTurn(game, preferredId) {
+  if (game.phase !== "play" || onlineIsTrickComplete(game)) return;
+  if (onlineCanTakeTurn(game, game.turnPlayerId)) return;
+  if (onlineCanTakeTurn(game, preferredId)) {
+    game.turnPlayerId = preferredId;
+    return;
+  }
+
+  const nextId =
+    onlineNextUnplayedActiveId(game, preferredId || game.turnPlayerId) ||
+    onlineActiveRoundPlayers(game).find((player) => player.hand.length > 0)?.id;
+  if (onlineCanTakeTurn(game, nextId)) game.turnPlayerId = nextId;
+}
+
+function onlineCanTakeTurn(game, playerId) {
+  const player = onlineGetPlayer(game, playerId);
+  return Boolean(player?.active && player.lives > 0 && player.hand.length > 0 && !onlineHasPlayedThisTrick(game, playerId));
 }
 
 function onlineFirstActiveIdFrom(game, fromId) {
@@ -1735,6 +1760,25 @@ function nextUnplayedActiveId(afterId) {
     if (activeIds.includes(player.id) && !playedIds.has(player.id)) return player.id;
   }
   return activeIds.find((id) => !playedIds.has(id)) || activeIds[0];
+}
+
+function repairTurn(preferredId) {
+  if (state.phase !== "play" || isTrickComplete()) return;
+  if (canTakeTurn(state.turnPlayerId)) return;
+  if (canTakeTurn(preferredId)) {
+    state.turnPlayerId = preferredId;
+    return;
+  }
+
+  const nextId =
+    nextUnplayedActiveId(preferredId || state.turnPlayerId) ||
+    activeRoundPlayers().find((player) => player.hand.length > 0)?.id;
+  if (canTakeTurn(nextId)) state.turnPlayerId = nextId;
+}
+
+function canTakeTurn(playerId) {
+  const player = getPlayer(playerId);
+  return Boolean(player?.active && player.lives > 0 && player.hand.length > 0 && !hasPlayedThisTrick(playerId));
 }
 
 function firstActiveIdFrom(fromId) {

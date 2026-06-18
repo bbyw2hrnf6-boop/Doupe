@@ -234,6 +234,13 @@ button {
   font-weight: 900;
 }
 
+.name-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .text-field,
 .select-field {
   width: 100%;

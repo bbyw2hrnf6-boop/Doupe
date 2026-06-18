@@ -63,7 +63,13 @@
 
             <div class="setup-mode hidden" id="onlineSetup">
               <label class="field-label" for="playerNameInput">Name at table</label>
-              <input class="text-field" id="playerNameInput" maxlength="18" placeholder="Player" type="text" />
+              <div class="name-line">
+                <input class="text-field" id="playerNameInput" maxlength="18" placeholder="Player" type="text" />
+                <button class="ghost-action" id="randomNameBtn" type="button">Random</button>
+              </div>
+
+              <label class="field-label" for="lobbyNameInput">Lobby name</label>
+              <input class="text-field" id="lobbyNameInput" maxlength="24" placeholder="Velvet table" type="text" />
 
               <div class="setup-row">
                 <span>Seats</span>
