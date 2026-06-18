@@ -206,6 +206,7 @@ function startGame(botCount) {
     currentTrick: emptyTrick(),
     turnPlayerId: "p0",
     nextLeaderId: "p0",
+    roundStarterId: "p0",
     dealerId: null,
     dealAnimationId: 0,
     lastTrickWinnerId: null,
@@ -213,6 +214,7 @@ function startGame(botCount) {
     dirtyPointer: 0,
     phase: "play",
     pendingDirtyClaim: null,
+    dirtyClaimedIds: [],
     pendingToep: null,
     toepCooldownPlays: -1,
     log: [],
@@ -242,6 +244,7 @@ function beginRound() {
   state.trickIndex = 0;
   state.lastTrickWinnerId = null;
   state.pendingDirtyClaim = null;
+  state.dirtyClaimedIds = [];
   state.pendingToep = null;
   state.toepCooldownPlays = -1;
   state.currentTrick = emptyTrick();
@@ -258,6 +261,7 @@ function beginRound() {
 
   assignDealerForRound();
   state.turnPlayerId = state.nextLeaderId;
+  state.roundStarterId = state.nextLeaderId;
   state.dirtyQueue = orderedAliveIdsFrom(state.nextLeaderId);
   state.dirtyPointer = 0;
   state.phase = "dirty";
@@ -345,6 +349,16 @@ function dirtyLaundryEnabled(game = state) {
   return roundTricks(game) === 4;
 }
 
+function hasDirtyClaimed(playerId) {
+  return (state.dirtyClaimedIds || []).includes(playerId);
+}
+
+function markDirtyClaimed(playerId) {
+  if (!playerId) return;
+  state.dirtyClaimedIds = state.dirtyClaimedIds || [];
+  if (!state.dirtyClaimedIds.includes(playerId)) state.dirtyClaimedIds.push(playerId);
+}
+
 function finalTrickName(game = state) {
   return roundTricks(game) === 4 ? "fourth trick" : "final trick";
 }
@@ -404,9 +418,12 @@ function humanClaimDirty() {
 
   if (!isHumanDirtyTurn()) return;
   const human = getHuman();
+  if (hasDirtyClaimed(human.id)) return;
+  markDirtyClaimed(human.id);
   const challenger = chooseBotDirtyChallenger(human);
   if (challenger) {
     settleDirtyChallenge(human, challenger);
+    state.dirtyPointer += 1;
   } else {
     log("You claim Dirty Laundry. The table lets it pass.");
     exchangeHand(human);
@@ -417,6 +434,8 @@ function humanClaimDirty() {
 }
 
 function resolveBotDirtyClaim(player) {
+  if (hasDirtyClaimed(player.id)) return;
+  markDirtyClaimed(player.id);
   log(`${player.name} claims Dirty Laundry.`);
   const human = getHuman();
   if (human && human.lives > 0 && player.id !== human.id) {
@@ -490,6 +509,7 @@ function isDirtyLaundry(hand) {
 }
 
 function botWantsDirtyLaundry(player) {
+  if (hasDirtyClaimed(player.id)) return false;
   const valid = isDirtyLaundry(player.hand);
   const score = handScore(player.hand);
   if (valid) return Math.random() < 0.86;
@@ -509,6 +529,7 @@ function startPlayPhase() {
   state.trickIndex = 0;
   state.currentTrick = emptyTrick();
   state.turnPlayerId = firstActiveIdFrom(state.nextLeaderId);
+  state.roundStarterId = state.turnPlayerId;
   log("Cards down. The first trick begins.");
   render();
   schedule(maybeBotTurn, DELAYS.botThink);
@@ -593,7 +614,7 @@ function maybeBotTurn() {
     return;
   }
 
-  if (botShouldToep(player)) {
+  if (canPlayerToep(player) && botShouldToep(player)) {
     initiateToep(player.id, { type: "botTurn" });
     return;
   }
@@ -1091,7 +1112,7 @@ function renderActionBox() {
     const turn = getPlayer(state.turnPlayerId);
     title.textContent = turn?.isHuman ? "Your move" : `${turn?.name || "Player"} thinks`;
     copy.textContent = turn?.isHuman
-      ? "Play a legal card. You may raise with Toep before you play."
+      ? "Play a legal card. Only the round starter may Toep before the first card."
       : "Bots play the same rules: follow suit, save strength, and bluff sometimes.";
   } else {
     title.textContent = "Table";
@@ -1253,6 +1274,7 @@ function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
     currentTrick: emptyTrick(),
     turnPlayerId: players[0]?.id || "p0",
     nextLeaderId: players[0]?.id || "p0",
+    roundStarterId: players[0]?.id || "p0",
     dealerId: null,
     dealAnimationId: 0,
     lastTrickWinnerId: null,
@@ -1260,6 +1282,7 @@ function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
     dirtyPointer: 0,
     phase: "roundOver",
     pendingDirtyClaim: null,
+    dirtyClaimedIds: [],
     pendingToep: null,
     toepCooldownPlays: -1,
     log: ["Online table is full. Cards are being dealt."],
@@ -1313,10 +1336,12 @@ function normalizeOnlineGame(game, uid) {
   }));
   copy.currentTrick = normalizeTrick(copy.currentTrick);
   copy.dirtyQueue = toList(copy.dirtyQueue);
+  copy.dirtyClaimedIds = toList(copy.dirtyClaimedIds);
   copy.log = toList(copy.log);
   copy.pendingToep = normalizePendingResponses(copy.pendingToep);
   copy.pendingDirtyClaim = normalizePendingResponses(copy.pendingDirtyClaim);
   copy.dealerId = copy.dealerId || null;
+  copy.roundStarterId = copy.roundStarterId || copy.nextLeaderId || null;
   copy.dealAnimationId = Number(copy.dealAnimationId) || 0;
   copy.toepCooldownPlays = Number.isFinite(Number(copy.toepCooldownPlays)) ? Number(copy.toepCooldownPlays) : -1;
   return copy;
@@ -1343,6 +1368,8 @@ function reduceOnlineAction(game, action) {
 
   if (action.type === "dirtyClaim") {
     if (!onlineIsDirtyTurn(next, player)) return game;
+    if (onlineHasDirtyClaimed(next, player.id)) return game;
+    onlineMarkDirtyClaimed(next, player.id);
     next.phase = "dirtyChallenge";
     next.pendingDirtyClaim = { claimerId: player.id, responses: {} };
     onlineLog(next, `${player.name} claims Dirty Laundry.`);
@@ -1376,6 +1403,7 @@ function onlineBeginRound(game) {
   game.trickIndex = 0;
   game.lastTrickWinnerId = null;
   game.pendingDirtyClaim = null;
+  game.dirtyClaimedIds = [];
   game.pendingToep = null;
   game.toepCooldownPlays = -1;
   game.currentTrick = emptyTrick();
@@ -1392,6 +1420,7 @@ function onlineBeginRound(game) {
 
   onlineAssignDealerForRound(game);
   game.turnPlayerId = game.nextLeaderId;
+  game.roundStarterId = game.nextLeaderId;
   game.dirtyQueue = onlineOrderedAliveIdsFrom(game, game.nextLeaderId);
   game.dirtyPointer = 0;
   game.dealAnimationId = (Number(game.dealAnimationId) || 0) + 1;
@@ -1433,6 +1462,7 @@ function onlineStartPlayPhase(game) {
   game.trickIndex = 0;
   game.currentTrick = emptyTrick();
   game.turnPlayerId = onlineFirstActiveIdFrom(game, game.nextLeaderId);
+  game.roundStarterId = game.turnPlayerId;
   onlineLog(game, "Cards down. The first trick begins.");
 }
 
@@ -1505,11 +1535,15 @@ function onlineCanPlayerToep(game, player) {
   return (
     game.phase === "play" &&
     player &&
+    player.id === game.roundStarterId &&
+    game.turnPlayerId === player.id &&
     player.active &&
     player.lives > 0 &&
     game.stake < 10 &&
     onlineActiveRoundPlayers(game).length > 1 &&
     !game.pendingToep &&
+    totalPlayedCards(game) === 0 &&
+    game.currentTrick.plays.length === 0 &&
     totalPlayedCards(game) !== game.toepCooldownPlays
   );
 }
@@ -1733,6 +1767,16 @@ function onlineHasPlayedThisTrick(game, playerId) {
   return game.currentTrick.plays.some((play) => play.playerId === playerId);
 }
 
+function onlineHasDirtyClaimed(game, playerId) {
+  return (game.dirtyClaimedIds || []).includes(playerId);
+}
+
+function onlineMarkDirtyClaimed(game, playerId) {
+  if (!playerId) return;
+  game.dirtyClaimedIds = game.dirtyClaimedIds || [];
+  if (!game.dirtyClaimedIds.includes(playerId)) game.dirtyClaimedIds.push(playerId);
+}
+
 function onlineIsDirtyTurn(game, player) {
   return game.phase === "dirty" && game.dirtyQueue[game.dirtyPointer] === player.id;
 }
@@ -1799,11 +1843,15 @@ function canPlayerToep(player) {
   return (
     state?.phase === "play" &&
     player &&
+    player.id === state.roundStarterId &&
+    state.turnPlayerId === player.id &&
     player.active &&
     player.lives > 0 &&
     state.stake < 10 &&
     activeRoundPlayers().length > 1 &&
     !state.pendingToep &&
+    totalPlayedCards() === 0 &&
+    state.currentTrick.plays.length === 0 &&
     totalPlayedCards() !== state.toepCooldownPlays
   );
 }
