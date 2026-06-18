@@ -1232,22 +1232,26 @@ function loadOnlineGame(roomId, uid, game, room = {}) {
 function normalizeOnlineGame(game, uid) {
   const copy = cloneData(game);
   copy.mode = "online";
-  copy.maxPlayers = Number(copy.maxPlayers) || copy.players?.length || 4;
+  copy.players = toList(copy.players);
+  copy.maxPlayers = Number(copy.maxPlayers) || copy.players.length || 4;
   copy.handSize = copy.maxPlayers === 2 && Number(copy.handSize || copy.tricksPerRound) === 8 ? 8 : 4;
   copy.tricksPerRound = copy.handSize;
   copy.localPlayerId = copy.players?.find((player) => player.uid === uid)?.id || null;
-  copy.players = (copy.players || []).map((player) => ({
+  copy.players = copy.players.map((player) => ({
     ...player,
     isHuman: player.uid === uid,
-    hand: player.hand || [],
-    playedCards: player.playedCards || [],
+    hand: toList(player.hand),
+    playedCards: toList(player.playedCards),
     active: Boolean(player.active),
     folded: Boolean(player.folded),
     eliminated: Boolean(player.eliminated),
     raises: player.raises || 0,
   }));
-  copy.currentTrick = copy.currentTrick || emptyTrick();
-  copy.log = copy.log || [];
+  copy.currentTrick = normalizeTrick(copy.currentTrick);
+  copy.dirtyQueue = toList(copy.dirtyQueue);
+  copy.log = toList(copy.log);
+  copy.pendingToep = normalizePendingResponses(copy.pendingToep);
+  copy.pendingDirtyClaim = normalizePendingResponses(copy.pendingDirtyClaim);
   copy.toepCooldownPlays = Number.isFinite(Number(copy.toepCooldownPlays)) ? Number(copy.toepCooldownPlays) : -1;
   return copy;
 }
@@ -1668,6 +1672,30 @@ function onlineLog(game, message) {
 
 function cloneData(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function toList(value) {
+  if (Array.isArray(value)) return value.filter((item) => item != null);
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value)
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .map(([, item]) => item)
+    .filter((item) => item != null);
+}
+
+function normalizeTrick(trick) {
+  return {
+    leadSuit: trick?.leadSuit || null,
+    plays: toList(trick?.plays),
+  };
+}
+
+function normalizePendingResponses(pending) {
+  if (!pending || typeof pending !== "object") return null;
+  return {
+    ...pending,
+    responses: pending.responses || {},
+  };
 }
 
 function actionButton(text, className, handler) {
