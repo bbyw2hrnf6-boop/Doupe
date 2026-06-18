@@ -26,6 +26,8 @@ const ui = {
   onlineSetup: document.querySelector("#onlineSetup"),
   playerNameInput: document.querySelector("#playerNameInput"),
   onlineSeatSelect: document.querySelector("#onlineSeatSelect"),
+  onlineHandSizeRow: document.querySelector("#onlineHandSizeRow"),
+  onlineHandSizeSelect: document.querySelector("#onlineHandSizeSelect"),
   createLobbyBtn: document.querySelector("#createLobbyBtn"),
   refreshLobbiesBtn: document.querySelector("#refreshLobbiesBtn"),
   onlineStatus: document.querySelector("#onlineStatus"),
@@ -62,9 +64,11 @@ function bootMultiplayer() {
   ui.createLobbyBtn.addEventListener("click", createLobby);
   ui.refreshLobbiesBtn.addEventListener("click", findLobbies);
   ui.leaveLobbyBtn.addEventListener("click", leaveRoom);
+  ui.onlineSeatSelect.addEventListener("change", syncOnlineHandSize);
   ui.playerNameInput.addEventListener("input", () => {
     localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
   });
+  syncOnlineHandSize();
 
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
@@ -129,11 +133,14 @@ async function createLobby() {
     const user = await ensureAuth();
     const roomRef = push(ref(db, ROOM_PATH));
     const now = Date.now();
+    const maxPlayers = Number(ui.onlineSeatSelect.value);
+    const handSize = selectedOnlineHandSize(maxPlayers);
     const room = {
       id: roomRef.key,
       code: makeRoomCode(),
       status: "open",
-      maxPlayers: Number(ui.onlineSeatSelect.value),
+      maxPlayers,
+      handSize,
       hostUid: user.uid,
       createdAt: now,
       updatedAt: now,
@@ -169,7 +176,12 @@ async function joinRoom(roomId) {
       const roster = rosterFromPlayers(players);
       if (roster.length >= room.maxPlayers) {
         room.status = "playing";
-        room.game = window.ToepenGame.createOnlineGame(roster.slice(0, room.maxPlayers), room.id, room.maxPlayers);
+        room.game = window.ToepenGame.createOnlineGame(
+          roster.slice(0, room.maxPlayers),
+          room.id,
+          room.maxPlayers,
+          room.handSize || 4,
+        );
       }
       return room;
     });
@@ -284,7 +296,7 @@ function renderLobbyList(rooms) {
     const title = document.createElement("strong");
     title.textContent = `Room ${room.code || room.id.slice(-4)}`;
     const meta = document.createElement("small");
-    meta.textContent = `${count} / ${room.maxPlayers} players`;
+    meta.textContent = `${count} / ${room.maxPlayers} players · ${roomHandText(room)}`;
     body.append(title, meta);
 
     const button = document.createElement("button");
@@ -315,7 +327,11 @@ function renderLobbyPanel(room) {
     row.append(body);
     ui.lobbyPlayers.append(row);
   }
-  setStatus(roster.length >= room.maxPlayers ? "Lobby full. Dealing..." : "Waiting for more players.");
+  setStatus(
+    roster.length >= room.maxPlayers
+      ? "Lobby full. Dealing..."
+      : `Waiting for more players. This table uses ${roomHandText(room)}.`,
+  );
 }
 
 function hideLobbyPanel() {
@@ -329,6 +345,21 @@ function makeLobbyPlayer(uid, order) {
     name: cleanName(ui.playerNameInput.value),
     joinedAt: Date.now() + order,
   };
+}
+
+function syncOnlineHandSize() {
+  const isDuel = Number(ui.onlineSeatSelect.value) === 2;
+  ui.onlineHandSizeRow?.classList.toggle("hidden", !isDuel);
+}
+
+function selectedOnlineHandSize(maxPlayers) {
+  if (Number(maxPlayers) !== 2) return 4;
+  return Number(ui.onlineHandSizeSelect?.value) === 8 ? 8 : 4;
+}
+
+function roomHandText(room) {
+  const cards = Number(room?.handSize) === 8 ? 8 : 4;
+  return `${cards} card${cards === 1 ? "" : "s"} each`;
 }
 
 function rosterFromPlayers(players) {

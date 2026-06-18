@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="A luxury-styled browser implementation of Toepen with bot opponents, lives, Dirty Laundry, Toep raises, and fourth-trick scoring."
+      content="A luxury-styled browser implementation of Toepen with bot opponents, online tables, lives, Dirty Laundry, Toep raises, and final-trick scoring."
     />
     <meta name="theme-color" content="#090806" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -30,7 +30,7 @@
           <p class="eyebrow">Dutch bluff table</p>
           <h1>Toepen Royale</h1>
           <p class="lede">
-            Win the fourth trick, pressure the table with Toep calls, and keep
+            Win the final trick, pressure the table with Toep calls, and keep
             your last lives under velvet-black lights.
           </p>
 
@@ -68,12 +68,21 @@
               <div class="setup-row">
                 <span>Seats</span>
                 <select class="select-field" id="onlineSeatSelect" aria-label="Online seats">
+                  <option value="2">2 players</option>
                   <option value="3">3 players</option>
                   <option value="4" selected>4 players</option>
                   <option value="5">5 players</option>
                   <option value="6">6 players</option>
                   <option value="7">7 players</option>
                   <option value="8">8 players</option>
+                </select>
+              </div>
+
+              <div class="setup-row hidden" id="onlineHandSizeRow">
+                <span>Cards each</span>
+                <select class="select-field" id="onlineHandSizeSelect" aria-label="Cards per player">
+                  <option value="4" selected>4 cards</option>
+                  <option value="8">8 cards</option>
                 </select>
               </div>
 
@@ -192,11 +201,11 @@
           <button class="icon-action" id="closeRulesBtn" type="button" aria-label="Close rules">x</button>
         </div>
         <ol>
-          <li>Each active player gets four cards from a 32-card deck.</li>
+          <li>Each active player gets four cards from a 32-card deck. Two-player online rooms may choose eight cards.</li>
           <li>Card power is 10, 9, 8, 7, A, K, Q, J. There is no trump.</li>
           <li>Dirty Laundry can exchange a weak hand: four A/K/Q/J cards, or three of those plus one 7.</li>
           <li>Players must follow the led suit when possible.</li>
-          <li>Only the fourth trick decides the round winner.</li>
+          <li>Only the final trick decides the round winner.</li>
           <li>Toep raises the stake by one. Folding pays the previous stake immediately.</li>
           <li>Active round losers pay the current stake. Players at zero lives leave the table.</li>
         </ol>

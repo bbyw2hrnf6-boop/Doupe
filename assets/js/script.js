@@ -192,6 +192,8 @@ function startGame(botCount) {
     round: 0,
     stake: 1,
     previousStake: 1,
+    handSize: 4,
+    tricksPerRound: 4,
     trickIndex: 0,
     currentTrick: emptyTrick(),
     turnPlayerId: "p0",
@@ -211,7 +213,7 @@ function startGame(botCount) {
   els.gameScreen.classList.remove("hidden");
   document.body.classList.add("game-active");
   setupMobilePanels();
-  log("Welcome to the table. Ten lives each. Fourth trick rules all.");
+  log("Welcome to the table. Ten lives each. Final trick rules all.");
   beginRound();
 }
 
@@ -238,7 +240,7 @@ function beginRound() {
     player.folded = false;
     player.raises = 0;
     player.playedCards = [];
-    player.hand = player.eliminated ? [] : drawCards(4);
+    player.hand = player.eliminated ? [] : drawCards(roundTricks());
   }
 
   const aliveIds = alivePlayers().map((player) => player.id);
@@ -285,6 +287,19 @@ function drawCards(count) {
 
 function emptyTrick() {
   return { leadSuit: null, plays: [] };
+}
+
+function roundTricks(game = state) {
+  const tricks = Number(game?.tricksPerRound || game?.handSize || 4);
+  return Number.isFinite(tricks) && tricks > 0 ? tricks : 4;
+}
+
+function dirtyLaundryEnabled(game = state) {
+  return roundTricks(game) === 4;
+}
+
+function finalTrickName(game = state) {
+  return roundTricks(game) === 4 ? "fourth trick" : "final trick";
 }
 
 function processDirtyLaundry() {
@@ -417,10 +432,11 @@ function settleDirtyChallenge(claimer, challenger) {
 function exchangeHand(player) {
   state.deck.push(...player.hand);
   state.deck = shuffle(state.deck);
-  player.hand = drawCards(4);
+  player.hand = drawCards(roundTricks());
 }
 
 function isDirtyLaundry(hand) {
+  if (hand.length !== 4) return false;
   const coreCount = hand.filter((card) => DIRTY_CORE.has(card.rank)).length;
   const sevenCount = hand.filter((card) => card.rank === "7").length;
   return coreCount === 4 || (coreCount === 3 && sevenCount === 1);
@@ -498,7 +514,7 @@ function completeTrick() {
   log(`${winner.name} wins trick ${state.trickIndex + 1}.`);
   state.trickIndex += 1;
 
-  if (state.trickIndex >= 4) {
+  if (state.trickIndex >= roundTricks()) {
     endRoundByLastTrick(winnerId);
     return;
   }
@@ -544,7 +560,7 @@ function chooseBotCard(player) {
   const sortedLow = [...legal].sort((a, b) => a.power - b.power);
   const sortedHigh = [...legal].sort((a, b) => b.power - a.power);
 
-  if (state.trickIndex === 3) {
+  if (state.trickIndex === roundTricks() - 1) {
     const currentWinner = currentWinningPlay();
     if (currentWinner && currentWinner.card.suit === state.currentTrick.leadSuit) {
       const beating = sortedLow.find(
@@ -661,7 +677,7 @@ function finishToepResponses(_humanCalled, after) {
 function botShouldToep(player) {
   if (state.stake >= 10 || player.raises >= 2 || activeRoundPlayers().length < 2) return false;
   const score = handScore(player.hand);
-  const late = state.trickIndex >= 2 ? 0.06 : 0;
+  const late = state.trickIndex >= Math.max(1, roundTricks() - 2) ? 0.06 : 0;
   if (score > 0.72) return Math.random() < 0.22 + late;
   if (score > 0.55) return Math.random() < 0.09 + late;
   return Math.random() < 0.025;
@@ -697,7 +713,7 @@ function endRoundByFold() {
 
 function endRoundByLastTrick(winnerId) {
   const winner = getPlayer(winnerId);
-  log(`${winner.name} takes the fourth trick and wins the round.`);
+  log(`${winner.name} takes the ${finalTrickName()} and wins the round.`);
   finishRound(winnerId, true);
 }
 
@@ -754,9 +770,12 @@ function markEliminations() {
 
 function render() {
   if (!state) return;
+  const tricks = roundTricks();
   els.roundTitle.textContent = `Round ${state.round}`;
   els.stakeValue.textContent = state.stake;
-  els.trickValue.textContent = state.phase === "dirty" ? "Dirty" : `${Math.min(state.trickIndex + 1, 4)} / 4`;
+  els.trickValue.textContent = state.phase.startsWith("dirty")
+    ? "Dirty"
+    : `${Math.min(state.trickIndex + 1, tricks)} / ${tricks}`;
   els.leadValue.textContent = state.currentTrick.leadSuit ? suitById(state.currentTrick.leadSuit).name : "-";
   els.centerStake.textContent = `${state.stake} life${state.stake === 1 ? "" : "s"}`;
   els.activeCount.textContent = `${activeRoundPlayers().length} active`;
@@ -849,6 +868,7 @@ function renderTrick() {
     const pile = document.createElement("div");
     pile.className = "pile-cards";
     const played = player.playedCards || [];
+    if (played.length > 4) pile.classList.add("long-pile");
     played.forEach((card, index) => {
       const cardEl = renderCard(card);
       cardEl.classList.add("pile-card");
@@ -1128,7 +1148,9 @@ function syncViewportSize() {
   document.documentElement.style.setProperty("--app-width", `${width}px`);
 }
 
-function createOnlineGame(roster, roomId, maxPlayers) {
+function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
+  const safeMaxPlayers = Number(maxPlayers) || roster.length || 4;
+  const safeHandSize = safeMaxPlayers === 2 && Number(handSize) === 8 ? 8 : 4;
   const players = roster.map((seat, index) => ({
     id: `p${index}`,
     uid: seat.uid,
@@ -1146,7 +1168,9 @@ function createOnlineGame(roster, roomId, maxPlayers) {
   const game = {
     mode: "online",
     roomId,
-    maxPlayers,
+    maxPlayers: safeMaxPlayers,
+    handSize: safeHandSize,
+    tricksPerRound: safeHandSize,
     players,
     deck: [],
     round: 0,
@@ -1196,6 +1220,9 @@ function loadOnlineGame(roomId, uid, game, room = {}) {
 function normalizeOnlineGame(game, uid) {
   const copy = cloneData(game);
   copy.mode = "online";
+  copy.maxPlayers = Number(copy.maxPlayers) || copy.players?.length || 4;
+  copy.handSize = copy.maxPlayers === 2 && Number(copy.handSize || copy.tricksPerRound) === 8 ? 8 : 4;
+  copy.tricksPerRound = copy.handSize;
   copy.localPlayerId = copy.players?.find((player) => player.uid === uid)?.id || null;
   copy.players = (copy.players || []).map((player) => ({
     ...player,
@@ -1259,6 +1286,7 @@ function reduceOnlineAction(game, action) {
 }
 
 function onlineBeginRound(game) {
+  const tricks = roundTricks(game);
   game.round += 1;
   game.stake = 1;
   game.previousStake = 1;
@@ -1275,7 +1303,7 @@ function onlineBeginRound(game) {
     player.folded = false;
     player.raises = 0;
     player.playedCards = [];
-    player.hand = player.eliminated ? [] : onlineDrawCards(game, 4);
+    player.hand = player.eliminated ? [] : onlineDrawCards(game, tricks);
   }
 
   const aliveIds = onlineAlivePlayers(game).map((player) => player.id);
@@ -1283,9 +1311,14 @@ function onlineBeginRound(game) {
   game.turnPlayerId = game.nextLeaderId;
   game.dirtyQueue = onlineOrderedAliveIdsFrom(game, game.nextLeaderId);
   game.dirtyPointer = 0;
-  game.phase = "dirty";
-  onlineLog(game, `Round ${game.round} starts. Dirty Laundry phase opens.`);
-  onlineAdvanceDirty(game);
+  if (dirtyLaundryEnabled(game)) {
+    game.phase = "dirty";
+    onlineLog(game, `Round ${game.round} starts. Dirty Laundry phase opens.`);
+    onlineAdvanceDirty(game);
+  } else {
+    onlineLog(game, `Round ${game.round} starts with ${tricks} cards each. Dirty Laundry sits out.`);
+    onlineStartPlayPhase(game);
+  }
   return game;
 }
 
@@ -1358,7 +1391,7 @@ function onlineSettleDirtyChallenge(game, claimer, challenger) {
 function onlineExchangeHand(game, player) {
   game.deck.push(...player.hand);
   game.deck = shuffle(game.deck);
-  player.hand = onlineDrawCards(game, 4);
+  player.hand = onlineDrawCards(game, roundTricks(game));
 }
 
 function onlineToep(game, player) {
@@ -1437,8 +1470,8 @@ function onlineCompleteTrick(game) {
   onlineLog(game, `${winner.name} wins trick ${game.trickIndex + 1}.`);
   game.trickIndex += 1;
 
-  if (game.trickIndex >= 4) {
-    onlineLog(game, `${winner.name} takes the fourth trick and wins the round.`);
+  if (game.trickIndex >= roundTricks(game)) {
+    onlineLog(game, `${winner.name} takes the ${finalTrickName(game)} and wins the round.`);
     onlineFinishRound(game, winnerId, true);
     return;
   }

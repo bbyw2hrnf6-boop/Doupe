@@ -26,6 +26,8 @@ Multiplayer uses Firebase from CDN ES modules. No npm, Vite, or build step.
 - Realtime Database stores open rooms under `toepenRooms`.
 - Players can open a lobby or join an open lobby.
 - When the lobby reaches the selected seat count, the game auto-starts.
+- Multiplayer supports 2-8 seats. Two-player rooms can choose 4-card or 8-card rounds before the lobby opens.
+- Dirty Laundry stays with 4-card rounds; 8-card duels skip Dirty Laundry and score on the final eighth trick.
 - Moves are written through Realtime Database transactions.
 
 Current test rules are open. For real public play, restrict room writes to authenticated room players. For cheat-resistant hidden hands, move dealing and move validation to trusted server code such as Cloud Functions.

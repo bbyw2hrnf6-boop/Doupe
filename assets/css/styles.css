@@ -654,6 +654,11 @@ button:not(:disabled):hover {
   height: 130px;
 }
 
+.pile-cards.long-pile {
+  width: 230px;
+  height: 146px;
+}
+
 .pile-card.card {
   position: absolute;
   left: 0;
@@ -1401,6 +1406,11 @@ body.game-active .app-shell {
     height: 78px;
   }
 
+  .pile-cards.long-pile {
+    width: 140px;
+    height: 86px;
+  }
+
   .pile-card.card {
     width: 56px;
     min-height: 76px;
@@ -1922,6 +1932,11 @@ body.game-active .app-shell {
   .pile-cards {
     width: 50px;
     height: 40px;
+  }
+
+  .pile-cards.long-pile {
+    width: 78px;
+    height: 46px;
   }
 
   .pile-card.card {
