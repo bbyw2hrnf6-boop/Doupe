@@ -1112,7 +1112,7 @@ function renderActionBox() {
     const turn = getPlayer(state.turnPlayerId);
     title.textContent = turn?.isHuman ? "Your move" : `${turn?.name || "Player"} thinks`;
     copy.textContent = turn?.isHuman
-      ? "Play a legal card. Only the round starter may Toep before the first card."
+      ? "Play a legal card. Only the trick leader may Toep before leading."
       : "Bots play the same rules: follow suit, save strength, and bluff sometimes.";
   } else {
     title.textContent = "Table";
@@ -1535,14 +1535,12 @@ function onlineCanPlayerToep(game, player) {
   return (
     game.phase === "play" &&
     player &&
-    player.id === game.roundStarterId &&
     game.turnPlayerId === player.id &&
     player.active &&
     player.lives > 0 &&
     game.stake < 10 &&
     onlineActiveRoundPlayers(game).length > 1 &&
     !game.pendingToep &&
-    totalPlayedCards(game) === 0 &&
     game.currentTrick.plays.length === 0 &&
     totalPlayedCards(game) !== game.toepCooldownPlays
   );
@@ -1843,14 +1841,12 @@ function canPlayerToep(player) {
   return (
     state?.phase === "play" &&
     player &&
-    player.id === state.roundStarterId &&
     state.turnPlayerId === player.id &&
     player.active &&
     player.lives > 0 &&
     state.stake < 10 &&
     activeRoundPlayers().length > 1 &&
     !state.pendingToep &&
-    totalPlayedCards() === 0 &&
     state.currentTrick.plays.length === 0 &&
     totalPlayedCards() !== state.toepCooldownPlays
   );

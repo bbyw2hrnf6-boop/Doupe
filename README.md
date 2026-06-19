@@ -29,7 +29,7 @@ Multiplayer uses Firebase from CDN ES modules. No npm, Vite, or build step.
 - When the lobby reaches the selected seat count, the game auto-starts.
 - Multiplayer supports 2-8 seats. Two-player rooms can choose 4-card or 8-card rounds before the lobby opens.
 - Dirty Laundry stays with 4-card rounds and can be claimed once per player per round; 8-card duels skip Dirty Laundry and score on the final eighth trick.
-- Only the round starter can Toep, and only before the first card is played. Others may join or step out.
+- Only the trick leader can Toep, and only before leading that trick. Others may join or step out.
 - Each round shows a shuffle/deal animation. The dealer rotates, and the next living seat after the dealer starts.
 - Moves are written through Realtime Database transactions.
 
