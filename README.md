@@ -1,6 +1,6 @@
 # Doupe
 
-Toepen Royale: a browser card game for solo bot play and online multiplayer.
+Doupe Royale: a static browser card table with Toepen and Schnautz / 31 / Schwimmen for solo bot play and online multiplayer.
 
 ## Run
 
@@ -27,9 +27,12 @@ Multiplayer uses Firebase from CDN ES modules. No npm, Vite, or build step.
 - Players can open a lobby or join an open lobby.
 - Hosts can name their lobby. Players can type a nickname or generate a random one before joining.
 - When the lobby reaches the selected seat count, the game auto-starts.
-- Multiplayer supports 2-8 seats. Two-player rooms can choose 4-card or 8-card rounds before the lobby opens.
+- The main menu chooses Toepen or Schnautz / 31 before solo play or lobby creation.
+- Toepen multiplayer supports 2-8 seats. Two-player rooms can choose 4-card or 8-card rounds before the lobby opens.
 - Dirty Laundry stays with 4-card rounds and can be claimed once per player per round; 8-card duels skip Dirty Laundry and score on the final eighth trick.
 - Only the trick leader can Toep, and only before leading that trick. Others may join or step out.
+- Schnautz / 31 multiplayer supports 2-8 seats with 3 or 4 starting lives.
+- Schnautz / 31 supports one-card swaps, all-card swaps, passing, knocking, instant 31, swimming at 0 lives, and elimination after another loss.
 - Each round shows a shuffle/deal animation. The dealer rotates, and the next living seat after the dealer starts.
 - Moves are written through Realtime Database transactions.
 

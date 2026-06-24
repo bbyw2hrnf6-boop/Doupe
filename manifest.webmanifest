@@ -1,7 +1,7 @@
 {
-  "name": "Toepen Royale",
-  "short_name": "Toepen",
-  "description": "A luxury-styled browser implementation of Toepen.",
+  "name": "Doupe Royale",
+  "short_name": "Doupe",
+  "description": "A luxury-styled browser card table with Toepen and Schnautz / 31.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

@@ -216,6 +216,7 @@ button {
   gap: 8px;
 }
 
+.game-picker,
 .mode-picker,
 .online-actions {
   display: grid;
@@ -257,6 +258,10 @@ button {
 
 .select-field {
   color: var(--gold-soft);
+}
+
+.compact-select {
+  max-width: 160px;
 }
 
 .text-field:focus,
@@ -893,6 +898,10 @@ button:not(:disabled):hover {
   min-height: 146px;
 }
 
+.hand.swim-hand {
+  justify-content: center;
+}
+
 .card {
   position: relative;
   display: block;
@@ -945,9 +954,192 @@ button:not(:disabled):hover {
   transform: translateY(-9px);
 }
 
+.card.selected {
+  transform: translateY(-10px);
+  box-shadow:
+    0 0 0 3px rgba(242, 211, 139, 0.24),
+    0 24px 40px rgba(0, 0, 0, 0.42);
+}
+
 .card.disabled {
   filter: saturate(0.34);
   opacity: 0.5;
+}
+
+.swim-table {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  width: min(100%, 560px);
+}
+
+.swim-center-title {
+  color: var(--gold-soft);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.swim-center {
+  display: flex;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 16px);
+  width: 100%;
+}
+
+.swim-center .card {
+  width: clamp(78px, 10vw, 116px);
+}
+
+.swim-results {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.score-pill {
+  padding: 7px 10px;
+  border: 1px solid rgba(244, 214, 150, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--gold-soft);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.score-pill.lost {
+  border-color: rgba(190, 47, 54, 0.45);
+  color: #ffb8b8;
+}
+
+.swim-reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
+  gap: 10px;
+  width: min(100%, 720px);
+}
+
+.swim-reveal-seat {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 10px;
+  border: 1px solid rgba(244, 214, 150, 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.swim-reveal-seat.lost {
+  border-color: rgba(190, 47, 54, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(190, 47, 54, 0.14);
+}
+
+.swim-reveal-seat.schnautz {
+  border-color: rgba(242, 211, 139, 0.72);
+  background: rgba(215, 173, 93, 0.1);
+  box-shadow:
+    inset 0 0 0 1px rgba(242, 211, 139, 0.22),
+    0 0 28px rgba(215, 173, 93, 0.16);
+}
+
+.swim-reveal-seat.out {
+  opacity: 0.72;
+}
+
+.swim-reveal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  color: var(--gold-soft);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.swim-reveal-cards {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.reveal-card.card {
+  width: 54px;
+  min-height: 76px;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
+}
+
+.reveal-card.schnautz-card {
+  box-shadow:
+    0 0 0 2px rgba(242, 211, 139, 0.7),
+    0 12px 22px rgba(215, 173, 93, 0.34);
+  transform: translateY(-3px);
+}
+
+.reveal-card .corner-rank {
+  font-size: 0.64rem;
+}
+
+.reveal-card .corner-suit {
+  font-size: 0.58rem;
+}
+
+.reveal-card .pip {
+  font-size: 0.82rem;
+}
+
+.reveal-card .pip-large {
+  font-size: 1.55rem;
+}
+
+.reveal-card .court-crown {
+  font-size: 0.58rem;
+}
+
+.reveal-card .court-suit {
+  font-size: 0.72rem;
+}
+
+.reveal-card .court-flourish {
+  font-size: 0.2rem;
+}
+
+.swim-reveal-seat small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.table-toast {
+  position: absolute;
+  z-index: 9;
+  top: 108px;
+  right: 18px;
+  max-width: min(42%, 340px);
+  padding: 8px 11px;
+  border: 1px solid rgba(244, 214, 150, 0.2);
+  border-radius: 8px;
+  background: rgba(8, 6, 4, 0.34);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  color: var(--gold-soft);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(0.72rem, 1.15vw, 0.96rem);
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.98);
+  opacity: 0;
+  backdrop-filter: blur(10px);
+}
+
+.table-toast.show {
+  animation: tableToastIn 220ms ease-out forwards;
+}
+
+.table-toast.leaving {
+  animation: tableToastOut 420ms ease-in forwards;
 }
 
 .corner {
@@ -1280,6 +1472,28 @@ button:not(:disabled):hover {
   }
 }
 
+@keyframes tableToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tableToastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
 @media (max-width: 1120px) {
   .game-layout {
     grid-template-columns: 1fr;
@@ -1451,6 +1665,7 @@ body.game-active .app-shell {
     grid-template-columns: repeat(3, 1fr);
   }
 
+  .game-picker,
   .mode-picker,
   .online-actions {
     grid-template-columns: 1fr;
@@ -1591,6 +1806,56 @@ body.game-active .app-shell {
     max-width: 100%;
   }
 
+  .swim-table {
+    gap: 6px;
+  }
+
+  .swim-center {
+    gap: 6px;
+  }
+
+  .swim-center .card {
+    width: 100%;
+    max-width: 74px;
+  }
+
+  .swim-results {
+    gap: 4px;
+  }
+
+  .score-pill {
+    padding: 4px 6px;
+    font-size: 0.58rem;
+  }
+
+  .swim-reveal-grid {
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 5px;
+  }
+
+  .swim-reveal-seat {
+    gap: 4px;
+    padding: 5px;
+  }
+
+  .swim-reveal-header,
+  .swim-reveal-seat small {
+    font-size: 0.52rem;
+  }
+
+  .reveal-card.card {
+    width: 38px;
+    min-height: 52px;
+  }
+
+  .table-toast {
+    top: 82px;
+    right: 10px;
+    max-width: min(52%, 240px);
+    padding: 6px 8px;
+    font-size: 0.62rem;
+  }
+
   .hand-zone {
     padding: 7px;
   }
@@ -1614,6 +1879,10 @@ body.game-active .app-shell {
     justify-content: center;
     gap: 6px;
     min-height: 0;
+  }
+
+  .hand.swim-hand {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .card {
@@ -2142,6 +2411,60 @@ body.game-active .app-shell {
     gap: 3px;
   }
 
+  .swim-table {
+    gap: 3px;
+  }
+
+  .swim-center-title {
+    font-size: 0.52rem;
+  }
+
+  .swim-center {
+    gap: 3px;
+  }
+
+  .swim-center .card {
+    width: 100%;
+    max-width: 42px;
+  }
+
+  .score-pill {
+    padding: 2px 4px;
+    font-size: 0.38rem;
+  }
+
+  .swim-reveal-grid {
+    grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+    gap: 2px;
+  }
+
+  .swim-reveal-seat {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .swim-reveal-header,
+  .swim-reveal-seat small {
+    font-size: 0.34rem;
+  }
+
+  .swim-reveal-cards {
+    gap: 1px;
+  }
+
+  .reveal-card.card {
+    width: 22px;
+    min-height: 30px;
+  }
+
+  .table-toast {
+    top: 38px;
+    right: 6px;
+    max-width: min(40%, 170px);
+    padding: 3px 5px;
+    font-size: 0.4rem;
+  }
+
   .hand-zone {
     padding: 3px;
   }
@@ -2164,6 +2487,10 @@ body.game-active .app-shell {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 3px;
     min-height: 0;
+  }
+
+  .hand.swim-hand {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .card {

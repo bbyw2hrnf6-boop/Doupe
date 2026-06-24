@@ -22,6 +22,8 @@ let db = null;
 const ui = {
   soloModeBtn: document.querySelector("#soloModeBtn"),
   onlineModeBtn: document.querySelector("#onlineModeBtn"),
+  gameToepenBtn: document.querySelector("#gameToepenBtn"),
+  gameSchwimmenBtn: document.querySelector("#gameSchwimmenBtn"),
   localSetup: document.querySelector("#localSetup"),
   onlineSetup: document.querySelector("#onlineSetup"),
   playerNameInput: document.querySelector("#playerNameInput"),
@@ -30,6 +32,8 @@ const ui = {
   onlineSeatSelect: document.querySelector("#onlineSeatSelect"),
   onlineHandSizeRow: document.querySelector("#onlineHandSizeRow"),
   onlineHandSizeSelect: document.querySelector("#onlineHandSizeSelect"),
+  onlineSwimLivesRow: document.querySelector("#onlineSwimLivesRow"),
+  onlineSwimLivesSelect: document.querySelector("#onlineSwimLivesSelect"),
   createLobbyBtn: document.querySelector("#createLobbyBtn"),
   refreshLobbiesBtn: document.querySelector("#refreshLobbiesBtn"),
   onlineStatus: document.querySelector("#onlineStatus"),
@@ -68,6 +72,9 @@ function bootMultiplayer() {
   ui.refreshLobbiesBtn.addEventListener("click", findLobbies);
   ui.leaveLobbyBtn.addEventListener("click", leaveRoom);
   ui.onlineSeatSelect.addEventListener("change", syncOnlineHandSize);
+  ui.gameToepenBtn.addEventListener("click", syncOnlineGameRows);
+  ui.gameSchwimmenBtn.addEventListener("click", syncOnlineGameRows);
+  document.addEventListener("doupeGameTypeChanged", syncOnlineGameRows);
   ui.randomNameBtn.addEventListener("click", randomizePlayerName);
   ui.playerNameInput.addEventListener("input", () => {
     localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
@@ -75,7 +82,7 @@ function bootMultiplayer() {
   ui.lobbyNameInput.addEventListener("input", () => {
     localStorage.setItem("toepenLobbyName", cleanLobbyName(ui.lobbyNameInput.value));
   });
-  syncOnlineHandSize();
+  syncOnlineGameRows();
 
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
@@ -141,15 +148,19 @@ async function createLobby() {
     const roomRef = push(ref(db, ROOM_PATH));
     const now = Date.now();
     const maxPlayers = Number(ui.onlineSeatSelect.value);
-    const handSize = selectedOnlineHandSize(maxPlayers);
+    const gameType = selectedLobbyGameType();
+    const handSize = gameType === "toepen" ? selectedOnlineHandSize(maxPlayers) : 3;
+    const swimLives = selectedOnlineSwimLives();
     const code = makeRoomCode();
     const room = {
       id: roomRef.key,
       code,
       lobbyName: cleanLobbyName(ui.lobbyNameInput.value) || `Table ${code}`,
       status: "open",
+      gameType,
       maxPlayers,
       handSize,
+      swimLives,
       hostUid: user.uid,
       createdAt: now,
       updatedAt: now,
@@ -185,12 +196,20 @@ async function joinRoom(roomId) {
       const roster = rosterFromPlayers(players);
       if (roster.length >= room.maxPlayers) {
         room.status = "playing";
-        room.game = window.ToepenGame.createOnlineGame(
-          roster.slice(0, room.maxPlayers),
-          room.id,
-          room.maxPlayers,
-          room.handSize || 4,
-        );
+        room.game =
+          room.gameType === "schwimmen"
+            ? window.ToepenGame.createOnlineSchwimmenGame(
+                roster.slice(0, room.maxPlayers),
+                room.id,
+                room.maxPlayers,
+                room.swimLives || 3,
+              )
+            : window.ToepenGame.createOnlineGame(
+                roster.slice(0, room.maxPlayers),
+                room.id,
+                room.maxPlayers,
+                room.handSize || 4,
+              );
       }
       return room;
     });
@@ -305,7 +324,7 @@ function renderLobbyList(rooms) {
     const title = document.createElement("strong");
     title.textContent = roomTitle(room);
     const meta = document.createElement("small");
-    meta.textContent = `${count} / ${room.maxPlayers} players · ${roomHandText(room)}`;
+    meta.textContent = `${count} / ${room.maxPlayers} players · ${roomGameText(room)}`;
     body.append(title, meta);
 
     const button = document.createElement("button");
@@ -339,7 +358,7 @@ function renderLobbyPanel(room) {
   setStatus(
     roster.length >= room.maxPlayers
       ? "Lobby full. Dealing..."
-      : `Waiting for more players. This table uses ${roomHandText(room)}.`,
+      : `Waiting for more players. This table plays ${roomGameText(room)}.`,
   );
 }
 
@@ -361,9 +380,16 @@ function randomizePlayerName() {
   localStorage.setItem("toepenPlayerName", cleanName(ui.playerNameInput.value));
 }
 
+function syncOnlineGameRows() {
+  const isSchwimmen = selectedLobbyGameType() === "schwimmen";
+  ui.onlineSwimLivesRow?.classList.toggle("hidden", !isSchwimmen);
+  syncOnlineHandSize();
+}
+
 function syncOnlineHandSize() {
   const isDuel = Number(ui.onlineSeatSelect.value) === 2;
-  ui.onlineHandSizeRow?.classList.toggle("hidden", !isDuel);
+  const isToepen = selectedLobbyGameType() === "toepen";
+  ui.onlineHandSizeRow?.classList.toggle("hidden", !(isToepen && isDuel));
 }
 
 function selectedOnlineHandSize(maxPlayers) {
@@ -371,9 +397,21 @@ function selectedOnlineHandSize(maxPlayers) {
   return Number(ui.onlineHandSizeSelect?.value) === 8 ? 8 : 4;
 }
 
-function roomHandText(room) {
+function selectedOnlineSwimLives() {
+  return Number(ui.onlineSwimLivesSelect?.value) === 4 ? 4 : 3;
+}
+
+function selectedLobbyGameType() {
+  return window.ToepenGame?.getSelectedGameType?.() === "schwimmen" ? "schwimmen" : "toepen";
+}
+
+function roomGameText(room) {
+  if (room?.gameType === "schwimmen") {
+    const lives = Number(room?.swimLives) === 4 ? 4 : 3;
+    return `Schnautz / 31 · ${lives} lives`;
+  }
   const cards = Number(room?.handSize) === 8 ? 8 : 4;
-  return `${cards} card${cards === 1 ? "" : "s"} each`;
+  return `Toepen · ${cards} card${cards === 1 ? "" : "s"} each`;
 }
 
 function roomTitle(room) {

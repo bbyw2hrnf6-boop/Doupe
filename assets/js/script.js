@@ -7,6 +7,7 @@ const SUITS = [
 
 const RANKS = ["7", "8", "9", "10", "J", "Q", "K", "A"];
 const POWER = { "10": 8, "9": 7, "8": 6, "7": 5, A: 4, K: 3, Q: 2, J: 1 };
+const SCHWIMMEN_VALUES = { A: 11, "10": 10, K: 10, Q: 10, J: 10, "9": 9, "8": 8, "7": 7 };
 const DIRTY_CORE = new Set(["A", "K", "Q", "J"]);
 const BOT_NAMES = ["Rook", "Sable", "Vesper", "Marlow", "Onyx", "Sterling", "Crown"];
 const PIP_LAYOUTS = {
@@ -56,28 +57,38 @@ const PIP_LAYOUTS = {
 };
 const DELAYS = {
   dirtyOpen: 950,
-  dirtyDecision: 1150,
-  afterHumanChoice: 750,
-  afterClaim: 900,
-  botThink: 1250,
-  botRecover: 800,
-  trickSettle: 1450,
+  dirtyDecision: 1350,
+  afterHumanChoice: 900,
+  afterClaim: 1050,
+  botThink: 2050,
+  botRecover: 1150,
+  trickSettle: 1700,
 };
 const DEAL_ANIMATION_MS = 1850;
+const TOAST_PATTERN =
+  /\b(Toep|knocks?|pass(?:es|ed)?|folds?|Dirty Laundry|Schnautz|31|loses?|sinks?|swimming|wins?|challenges?|stands alone|takes the)\b/i;
 
 const els = {
   menuScreen: document.querySelector("#menuScreen"),
   gameScreen: document.querySelector("#gameScreen"),
   endScreen: document.querySelector("#endScreen"),
+  gameToepenBtn: document.querySelector("#gameToepenBtn"),
+  gameSchwimmenBtn: document.querySelector("#gameSchwimmenBtn"),
   playerPicker: document.querySelector("#playerPicker"),
   botCountLabel: document.querySelector("#botCountLabel"),
+  localToepenLivesRow: document.querySelector("#localToepenLivesRow"),
+  localSwimLivesRow: document.querySelector("#localSwimLivesRow"),
+  localSwimLivesSelect: document.querySelector("#localSwimLivesSelect"),
   startGameBtn: document.querySelector("#startGameBtn"),
   playAgainBtn: document.querySelector("#playAgainBtn"),
   newGameBtn: document.querySelector("#newGameBtn"),
   fullscreenBtn: document.querySelector("#fullscreenBtn"),
   roundTitle: document.querySelector("#roundTitle"),
+  stakeLabel: document.querySelector("#stakeLabel"),
   stakeValue: document.querySelector("#stakeValue"),
+  trickLabel: document.querySelector("#trickLabel"),
   trickValue: document.querySelector("#trickValue"),
+  leadLabel: document.querySelector("#leadLabel"),
   leadValue: document.querySelector("#leadValue"),
   centerStake: document.querySelector("#centerStake"),
   activeCount: document.querySelector("#activeCount"),
@@ -85,6 +96,7 @@ const els = {
   opponentRail: document.querySelector("#opponentRail"),
   trickArea: document.querySelector("#trickArea"),
   dealOverlay: document.querySelector("#dealOverlay"),
+  tableToast: document.querySelector("#tableToast"),
   dealerName: document.querySelector("#dealerName"),
   dealText: document.querySelector("#dealText"),
   humanHand: document.querySelector("#humanHand"),
@@ -102,10 +114,15 @@ const els = {
 };
 
 let selectedBotCount = 2;
+let selectedGameType = "toepen";
 let state = null;
 let timer = null;
 let dealTimer = null;
+let toastTimer = null;
 let lastDealAnimationId = null;
+let lastToastSerial = null;
+let lastToastMessage = null;
+let selectedSwimHandCardId = null;
 let onlineContext = {
   roomId: null,
   uid: null,
@@ -114,7 +131,18 @@ let onlineContext = {
 function boot() {
   syncViewportSize();
   buildPlayerPicker();
-  els.startGameBtn.addEventListener("click", () => startGame(selectedBotCount));
+  els.gameToepenBtn.addEventListener("click", () => selectGameType("toepen"));
+  els.gameSchwimmenBtn.addEventListener("click", () => selectGameType("schwimmen"));
+  els.localSwimLivesSelect.addEventListener("change", () => {
+    document.dispatchEvent(new CustomEvent("doupeGameTypeChanged", { detail: getMenuGameSettings() }));
+  });
+  els.startGameBtn.addEventListener("click", () => {
+    if (selectedGameType === "schwimmen") {
+      startSchwimmenGame(selectedBotCount);
+    } else {
+      startGame(selectedBotCount);
+    }
+  });
   els.playAgainBtn.addEventListener("click", showMenu);
   els.newGameBtn.addEventListener("click", showMenu);
   els.fullscreenBtn.addEventListener("click", toggleFullscreen);
@@ -126,6 +154,7 @@ function boot() {
   window.visualViewport?.addEventListener("resize", syncViewportSize);
   document.addEventListener("fullscreenchange", renderFullscreenButton);
   document.addEventListener("webkitfullscreenchange", renderFullscreenButton);
+  selectGameType("toepen");
   showMenu();
 }
 
@@ -146,16 +175,44 @@ function buildPlayerPicker() {
   }
 }
 
+function selectGameType(gameType) {
+  selectedGameType = gameType === "schwimmen" ? "schwimmen" : "toepen";
+  const isSchwimmen = selectedGameType === "schwimmen";
+  els.gameToepenBtn.classList.toggle("active", !isSchwimmen);
+  els.gameSchwimmenBtn.classList.toggle("active", isSchwimmen);
+  els.gameToepenBtn.setAttribute("aria-pressed", String(!isSchwimmen));
+  els.gameSchwimmenBtn.setAttribute("aria-pressed", String(isSchwimmen));
+  els.localToepenLivesRow.classList.toggle("hidden", isSchwimmen);
+  els.localSwimLivesRow.classList.toggle("hidden", !isSchwimmen);
+  els.startGameBtn.textContent = isSchwimmen ? "Start Schnautz" : "Take seat";
+  document.dispatchEvent(new CustomEvent("doupeGameTypeChanged", { detail: getMenuGameSettings() }));
+}
+
+function getMenuGameSettings() {
+  return {
+    gameType: selectedGameType,
+    swimLives: selectedSwimLives(),
+  };
+}
+
+function selectedSwimLives() {
+  return Number(els.localSwimLivesSelect?.value) === 4 ? 4 : 3;
+}
+
 function showMenu() {
   clearTimer();
   if (state?.mode === "online") {
     window.ToepenOnline?.leaveRoom?.();
   }
   state = null;
+  selectedSwimHandCardId = null;
   onlineContext = { roomId: null, uid: null };
   document.body.classList.remove("game-active", "app-fullscreen", "fullscreen-fallback");
   hideDealAnimation();
+  clearTableToast();
   lastDealAnimationId = null;
+  lastToastSerial = null;
+  lastToastMessage = null;
   els.menuScreen.classList.remove("hidden");
   els.gameScreen.classList.add("hidden");
   els.endScreen.classList.add("hidden");
@@ -195,6 +252,7 @@ function startGame(botCount) {
   }
 
   state = {
+    gameType: "toepen",
     players,
     deck: [],
     round: 0,
@@ -228,6 +286,472 @@ function startGame(botCount) {
   setupMobilePanels();
   log("Welcome to the table. Ten lives each. Final trick rules all.");
   beginRound();
+}
+
+function startSchwimmenGame(botCount) {
+  clearTimer();
+  selectedSwimHandCardId = null;
+  const startingLives = selectedSwimLives();
+  const players = [
+    {
+      id: "p0",
+      name: "You",
+      isHuman: true,
+      lives: startingLives,
+      swimming: false,
+      hand: [],
+      active: true,
+      folded: false,
+      eliminated: false,
+      playedCards: [],
+    },
+  ];
+
+  for (let index = 0; index < botCount; index += 1) {
+    players.push({
+      id: `p${index + 1}`,
+      name: BOT_NAMES[index],
+      isHuman: false,
+      lives: startingLives,
+      swimming: false,
+      hand: [],
+      active: true,
+      folded: false,
+      eliminated: false,
+      playedCards: [],
+    });
+  }
+
+  state = {
+    gameType: "schwimmen",
+    players,
+    deck: [],
+    discard: [],
+    centerCards: [],
+    round: 0,
+    swimLives: startingLives,
+    turnPlayerId: "p0",
+    nextLeaderId: "p0",
+    dealerId: null,
+    dealAnimationId: 0,
+    phase: "swimPlay",
+    knockerId: null,
+    knockRemainingIds: [],
+    passStreak: 0,
+    lastRoundScores: [],
+    log: [],
+    winnerId: null,
+  };
+
+  els.menuScreen.classList.add("hidden");
+  els.endScreen.classList.add("hidden");
+  els.gameScreen.classList.remove("hidden");
+  document.body.classList.add("game-active");
+  setupMobilePanels();
+  log(`Welcome to Schnautz. ${startingLives} lives, then swimming, then out.`);
+  beginSchwimmenRound();
+}
+
+function beginSchwimmenRound() {
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({ type: "beginRound" });
+    return;
+  }
+
+  clearTimer();
+  clearDealTimer();
+  selectedSwimHandCardId = null;
+  state.round += 1;
+  state.deck = shuffle(createDeck());
+  state.discard = [];
+  state.centerCards = [];
+  state.knockerId = null;
+  state.knockRemainingIds = [];
+  state.passStreak = 0;
+  state.lastRoundScores = [];
+  state.phase = "swimPlay";
+
+  for (const player of state.players) {
+    player.active = !player.eliminated;
+    player.folded = false;
+    player.playedCards = [];
+    player.hand = player.eliminated ? [] : drawFromGameDeck(state, 3);
+  }
+
+  state.centerCards = drawFromGameDeck(state, 3);
+  assignSchwimmenDealerForRound();
+  state.turnPlayerId = firstSchwimmenPlayerIdFrom(state.nextLeaderId);
+  state.dealAnimationId += 1;
+  log(`${getPlayer(state.dealerId)?.name || "Dealer"} shuffles and deals. ${getPlayer(state.turnPlayerId)?.name || "Next seat"} starts.`);
+  render();
+  schedule(maybeSchwimmenBotTurn, DEAL_ANIMATION_MS + DELAYS.botThink);
+}
+
+function humanSelectSchwimmenCard(cardId) {
+  const human = getHuman();
+  if (!canHumanSchwimmenAct() || !human.hand.some((card) => card.id === cardId)) return;
+  selectedSwimHandCardId = selectedSwimHandCardId === cardId ? null : cardId;
+  render();
+}
+
+function humanSchwimmenSwapCenter(centerCardId) {
+  if (!selectedSwimHandCardId) return;
+  if (state?.mode === "online") {
+    window.ToepenOnline?.sendAction?.({
+      type: "swimSwapOne",
+      handCardId: selectedSwimHandCardId,
+      centerCardId,
+    });
+    selectedSwimHandCardId = null;
+    return;
+  }
+
+  const human = getHuman();
+  if (!canHumanSchwimmenAct()) return;
+  const handCard = human.hand.find((card) => card.id === selectedSwimHandCardId);
+  const centerCard = state.centerCards.find((card) => card.id === centerCardId);
+  if (!handCard || !centerCard) return;
+
+  performSchwimmenSwapOne(state, human, handCard.id, centerCard.id);
+  log(`You trade ${cardLabel(handCard)} for ${cardLabel(centerCard)}.`);
+  afterSchwimmenAction(human, { changed: true });
+}
+
+function humanSchwimmenSwapAll() {
+  if (state?.mode === "online") {
+    selectedSwimHandCardId = null;
+    window.ToepenOnline?.sendAction?.({ type: "swimSwapAll" });
+    return;
+  }
+
+  const human = getHuman();
+  if (!canHumanSchwimmenAct()) return;
+  performSchwimmenSwapAll(state, human);
+  log("You trade all three cards with the center.");
+  afterSchwimmenAction(human, { changed: true });
+}
+
+function humanSchwimmenPass() {
+  if (state?.mode === "online") {
+    selectedSwimHandCardId = null;
+    window.ToepenOnline?.sendAction?.({ type: "swimPass" });
+    return;
+  }
+
+  const human = getHuman();
+  if (!canHumanSchwimmenAct()) return;
+  log("You pass.");
+  afterSchwimmenAction(human, { changed: false });
+}
+
+function humanSchwimmenKnock() {
+  if (state?.mode === "online") {
+    selectedSwimHandCardId = null;
+    window.ToepenOnline?.sendAction?.({ type: "swimKnock" });
+    return;
+  }
+
+  const human = getHuman();
+  if (!canHumanSchwimmenAct() || state.knockerId) return;
+  schwimmenKnock(human);
+}
+
+function humanSchwimmenSchnautz() {
+  if (state?.mode === "online") {
+    selectedSwimHandCardId = null;
+    window.ToepenOnline?.sendAction?.({ type: "swimSchnautz" });
+    return;
+  }
+
+  const human = getHuman();
+  if (!canHumanSchwimmenAct() || schwimmenHandValue(human.hand) !== 31) return;
+  finishSchwimmenRound(`${human.name} announces Schnautz with 31.`);
+}
+
+function schwimmenKnock(player) {
+  state.knockerId = player.id;
+  state.knockRemainingIds = activeSchwimmenPlayers()
+    .filter((seat) => seat.id !== player.id)
+    .map((seat) => seat.id);
+  state.passStreak = 0;
+  selectedSwimHandCardId = null;
+  log(`${player.name} knocks. Everyone else gets one last turn.`);
+
+  if (state.knockRemainingIds.length === 0) {
+    finishSchwimmenRound(`${player.name} knocks and stands alone.`);
+    return;
+  }
+
+  state.turnPlayerId = nextSchwimmenTurnId(player.id);
+  render();
+  schedule(maybeSchwimmenBotTurn, DELAYS.botThink);
+}
+
+function afterSchwimmenAction(player, options = {}) {
+  selectedSwimHandCardId = null;
+  if (options.changed) {
+    state.passStreak = 0;
+  } else if (!state.knockerId) {
+    state.passStreak += 1;
+    if (state.passStreak >= activeSchwimmenPlayers().length) {
+      replaceSchwimmenCenter();
+      state.passStreak = 0;
+    }
+  }
+
+  const score = schwimmenHandValue(player.hand);
+  if (score === 31) {
+    finishSchwimmenRound(`${player.name} announces Schnautz with 31.`);
+    return;
+  }
+
+  if (state.knockerId && player.id !== state.knockerId) {
+    state.knockRemainingIds = state.knockRemainingIds.filter((id) => id !== player.id);
+    if (state.knockRemainingIds.length === 0) {
+      finishSchwimmenRound(`${getPlayer(state.knockerId)?.name || "The knocker"}'s final lap is complete.`);
+      return;
+    }
+  }
+
+  state.turnPlayerId = nextSchwimmenTurnId(player.id);
+  render();
+  schedule(maybeSchwimmenBotTurn, DELAYS.botThink);
+}
+
+function maybeSchwimmenBotTurn() {
+  if (!state || state.gameType !== "schwimmen" || state.phase !== "swimPlay" || state.mode === "online") return;
+  const player = getPlayer(state.turnPlayerId);
+  if (!player || player.eliminated) {
+    state.turnPlayerId = nextSchwimmenTurnId(state.turnPlayerId);
+    render();
+    schedule(maybeSchwimmenBotTurn, DELAYS.botRecover);
+    return;
+  }
+
+  if (player.isHuman) {
+    render();
+    return;
+  }
+
+  const score = schwimmenHandValue(player.hand);
+  if (score === 31) {
+    finishSchwimmenRound(`${player.name} announces Schnautz with 31.`);
+    return;
+  }
+
+  if (!state.knockerId && score >= 28 && Math.random() < 0.42) {
+    schwimmenKnock(player);
+    return;
+  }
+
+  const move = chooseSchwimmenBotMove(player);
+  if (move.type === "swapOne") {
+    const handCard = player.hand.find((card) => card.id === move.handCardId);
+    const centerCard = state.centerCards.find((card) => card.id === move.centerCardId);
+    performSchwimmenSwapOne(state, player, move.handCardId, move.centerCardId);
+    log(`${player.name} trades ${cardLabel(handCard)} for ${cardLabel(centerCard)}.`);
+    afterSchwimmenAction(player, { changed: true });
+    return;
+  }
+
+  if (move.type === "swapAll") {
+    performSchwimmenSwapAll(state, player);
+    log(`${player.name} trades all three cards.`);
+    afterSchwimmenAction(player, { changed: true });
+    return;
+  }
+
+  if (!state.knockerId && score >= 25 && Math.random() < 0.18) {
+    schwimmenKnock(player);
+    return;
+  }
+
+  log(`${player.name} passes.`);
+  afterSchwimmenAction(player, { changed: false });
+}
+
+function chooseSchwimmenBotMove(player) {
+  const current = schwimmenHandValue(player.hand);
+  let best = { type: "pass", score: current };
+
+  for (const handCard of player.hand) {
+    for (const centerCard of state.centerCards) {
+      const testHand = player.hand.map((card) => (card.id === handCard.id ? centerCard : card));
+      const score = schwimmenHandValue(testHand);
+      if (score > best.score) best = { type: "swapOne", handCardId: handCard.id, centerCardId: centerCard.id, score };
+    }
+  }
+
+  const allScore = schwimmenHandValue(state.centerCards);
+  if (allScore > best.score) best = { type: "swapAll", score: allScore };
+
+  if (best.score > current || (best.type !== "pass" && best.score >= 26 && Math.random() < 0.22)) return best;
+  return { type: "pass", score: current };
+}
+
+function performSchwimmenSwapOne(game, player, handCardId, centerCardId) {
+  const handIndex = player.hand.findIndex((card) => card.id === handCardId);
+  const centerIndex = game.centerCards.findIndex((card) => card.id === centerCardId);
+  if (handIndex < 0 || centerIndex < 0) return false;
+  const handCard = player.hand[handIndex];
+  player.hand[handIndex] = game.centerCards[centerIndex];
+  game.centerCards[centerIndex] = handCard;
+  return true;
+}
+
+function performSchwimmenSwapAll(game, player) {
+  const oldHand = player.hand;
+  player.hand = game.centerCards;
+  game.centerCards = oldHand;
+}
+
+function replaceSchwimmenCenter(game = state) {
+  game.discard = [...(game.discard || []), ...(game.centerCards || [])];
+  game.centerCards = drawFromGameDeck(game, 3);
+  log("Everyone passed. The center is washed away and three new cards appear.");
+}
+
+function finishSchwimmenRound(reason) {
+  clearTimer();
+  selectedSwimHandCardId = null;
+  if (reason) log(reason);
+
+  const players = activeSchwimmenPlayers();
+  const scores = players.map((player) => ({
+    playerId: player.id,
+    name: player.name,
+    score: schwimmenHandValue(player.hand),
+    lost: false,
+  }));
+  const lowest = Math.min(...scores.map((entry) => entry.score));
+  const losers = scores.filter((entry) => entry.score === lowest);
+
+  for (const result of scores) {
+    result.lost = losers.some((loser) => loser.playerId === result.playerId);
+  }
+  state.lastRoundScores = scores.sort((a, b) => b.score - a.score);
+
+  for (const loser of losers) {
+    const player = getPlayer(loser.playerId);
+    if (!player || player.eliminated) continue;
+    if (player.swimming || player.lives <= 0) {
+      player.eliminated = true;
+      player.active = false;
+      log(`${player.name} loses with ${formatSchwimmenScore(loser.score)} and sinks out.`);
+    } else if (player.lives > 1) {
+      player.lives -= 1;
+      log(`${player.name} loses with ${formatSchwimmenScore(loser.score)} and loses 1 life.`);
+    } else {
+      player.lives = 0;
+      player.swimming = true;
+      log(`${player.name} loses with ${formatSchwimmenScore(loser.score)} and starts swimming.`);
+    }
+  }
+
+  const remaining = activeSchwimmenPlayers();
+  if (remaining.length <= 1) {
+    finishSchwimmenGame(remaining[0]?.id || null);
+    return;
+  }
+
+  state.phase = "roundOver";
+  render();
+}
+
+function finishSchwimmenGame(winnerId) {
+  clearTimer();
+  const winner = getPlayer(winnerId) || activeSchwimmenPlayers()[0];
+  state.phase = "gameOver";
+  state.winnerId = winner?.id || null;
+  log(`${winner?.name || "No one"} wins the Schnautz match.`);
+  render();
+}
+
+function assignSchwimmenDealerForRound() {
+  const active = activeSchwimmenPlayers();
+  if (active.length === 0) return;
+  if (!state.dealerId) {
+    state.dealerId = schwimmenSeatIdFrom(active[0].id, -1);
+  } else {
+    state.dealerId = schwimmenSeatIdFrom(state.dealerId, 1);
+  }
+  state.nextLeaderId = schwimmenSeatIdFrom(state.dealerId, 1);
+}
+
+function nextSchwimmenTurnId(fromId, game = state) {
+  const remaining = game.knockerId ? new Set(game.knockRemainingIds || []) : null;
+  const start = Math.max(0, game.players.findIndex((player) => player.id === fromId));
+  for (let offset = 1; offset <= game.players.length; offset += 1) {
+    const player = game.players[(start + offset) % game.players.length];
+    if (!player?.eliminated && (!remaining || remaining.has(player.id))) return player.id;
+  }
+  return null;
+}
+
+function firstSchwimmenPlayerIdFrom(fromId, game = state) {
+  const activeIds = activeSchwimmenPlayers(game).map((player) => player.id);
+  return activeIds.includes(fromId) ? fromId : activeIds[0];
+}
+
+function schwimmenSeatIdFrom(fromId, direction, game = state) {
+  const active = activeSchwimmenPlayers(game);
+  if (active.length === 0) return null;
+  const startIndex = Math.max(0, game.players.findIndex((player) => player.id === fromId));
+  for (let offset = 1; offset <= game.players.length; offset += 1) {
+    const player = game.players[(startIndex + direction * offset + game.players.length) % game.players.length];
+    if (player && !player.eliminated) return player.id;
+  }
+  return active[0].id;
+}
+
+function canHumanSchwimmenAct() {
+  const human = getHuman();
+  return Boolean(
+    state?.phase === "swimPlay" &&
+      human &&
+      state.turnPlayerId === human.id &&
+      !human.eliminated &&
+      state.knockerId !== human.id,
+  );
+}
+
+function activeSchwimmenPlayers(game = state) {
+  return (game?.players || []).filter((player) => !player.eliminated);
+}
+
+function drawFromGameDeck(game, count) {
+  if (game.deck.length < count && game.discard?.length) {
+    game.deck = shuffle([...game.deck, ...game.discard]);
+    game.discard = [];
+  }
+  return game.deck.splice(0, count);
+}
+
+function schwimmenHandValue(hand) {
+  if (!hand?.length) return 0;
+  const rankCounts = hand.reduce((counts, card) => {
+    counts[card.rank] = (counts[card.rank] || 0) + 1;
+    return counts;
+  }, {});
+  const threeKind = Object.values(rankCounts).some((count) => count === 3) ? 30.5 : 0;
+  const suitScores = hand.reduce((scores, card) => {
+    scores[card.suit] = (scores[card.suit] || 0) + SCHWIMMEN_VALUES[card.rank];
+    return scores;
+  }, {});
+  return Math.max(threeKind, ...Object.values(suitScores));
+}
+
+function schnautzSuitForHand(hand) {
+  const suitScores = (hand || []).reduce((scores, card) => {
+    scores[card.suit] = (scores[card.suit] || 0) + SCHWIMMEN_VALUES[card.rank];
+    return scores;
+  }, {});
+  const entry = Object.entries(suitScores).find(([, score]) => score === 31);
+  return entry?.[0] || null;
+}
+
+function formatSchwimmenScore(score) {
+  return score === 30.5 ? "30.5" : String(Math.round(score));
 }
 
 function beginRound() {
@@ -842,7 +1366,14 @@ function markEliminations() {
 
 function render() {
   if (!state) return;
+  if (isSchwimmenState()) {
+    renderSchwimmen();
+    return;
+  }
   const tricks = roundTricks();
+  els.stakeLabel.textContent = "Stake";
+  els.trickLabel.textContent = "Trick";
+  els.leadLabel.textContent = "Lead";
   els.roundTitle.textContent = `Round ${state.round}`;
   els.stakeValue.textContent = state.stake;
   els.trickValue.textContent = state.phase.startsWith("dirty")
@@ -860,6 +1391,34 @@ function render() {
   renderLog();
   renderButtons();
   renderDealAnimation();
+  maybeShowLatestToast();
+}
+
+function renderSchwimmen() {
+  const human = getHuman();
+  els.stakeLabel.textContent = "Lives";
+  els.trickLabel.textContent = "Center";
+  els.leadLabel.textContent = "Turn";
+  els.roundTitle.textContent = `Schnautz Round ${state.round}`;
+  els.stakeValue.textContent = state.swimLives || 3;
+  els.trickValue.textContent = `${state.centerCards?.length || 0} cards`;
+  els.leadValue.textContent = getPlayer(state.turnPlayerId)?.name || "-";
+  els.centerStake.textContent = human?.hand?.length ? `${formatSchwimmenScore(schwimmenHandValue(human.hand))} points` : "Center swap";
+  els.activeCount.textContent = `${activeSchwimmenPlayers().length} in`;
+  els.phaseLabel.textContent = phaseName();
+  renderScoreboard();
+  renderOpponents();
+  renderTrick();
+  renderHumanHand();
+  renderActionBox();
+  renderLog();
+  renderButtons();
+  renderDealAnimation();
+  maybeShowLatestToast();
+}
+
+function isSchwimmenState(game = state) {
+  return game?.gameType === "schwimmen";
 }
 
 function renderScoreboard() {
@@ -868,7 +1427,7 @@ function renderScoreboard() {
     const row = document.createElement("div");
     row.className = [
       "player-chip",
-      state.turnPlayerId === player.id && state.phase === "play" ? "turn" : "",
+      state.turnPlayerId === player.id && (state.phase === "play" || state.phase === "swimPlay") ? "turn" : "",
       player.folded ? "folded" : "",
       player.eliminated ? "out" : "",
     ]
@@ -920,6 +1479,11 @@ function renderOpponents() {
 }
 
 function renderTrick() {
+  if (isSchwimmenState()) {
+    renderSchwimmenTable();
+    return;
+  }
+
   els.trickArea.innerHTML = "";
   const tablePlayers = state.players.filter((player) => player.lives > 0 || player.playedCards?.length);
   const hasPlayedCards = tablePlayers.some((player) => player.playedCards?.length);
@@ -957,14 +1521,119 @@ function renderTrick() {
   }
 }
 
+function renderSchwimmenTable() {
+  els.trickArea.innerHTML = "";
+
+  const table = document.createElement("div");
+  table.className = "swim-table";
+
+  if ((state.phase === "roundOver" || state.phase === "gameOver") && state.lastRoundScores?.length) {
+    table.append(renderSchwimmenReveal());
+    els.trickArea.append(table);
+    return;
+  }
+
+  const title = document.createElement("div");
+  title.className = "swim-center-title";
+  title.textContent = "Tauschmitte";
+
+  const center = document.createElement("div");
+  center.className = "swim-center";
+  const canSwap = canHumanSchwimmenAct() && Boolean(selectedSwimHandCardId);
+  for (const card of state.centerCards || []) {
+    const cardEl = renderCard(card, { asButton: canSwap });
+    cardEl.classList.toggle("playable", canSwap);
+    if (canSwap) {
+      cardEl.addEventListener("click", () => humanSchwimmenSwapCenter(card.id));
+    }
+    center.append(cardEl);
+  }
+
+  table.append(title, center);
+
+  if (state.lastRoundScores?.length) {
+    const results = document.createElement("div");
+    results.className = "swim-results";
+    for (const result of state.lastRoundScores) {
+      const pill = document.createElement("div");
+      pill.className = `score-pill${result.lost ? " lost" : ""}`;
+      pill.textContent = `${result.name}: ${formatSchwimmenScore(result.score)}`;
+      results.append(pill);
+    }
+    table.append(results);
+  }
+
+  els.trickArea.append(table);
+}
+
+function renderSchwimmenReveal() {
+  const reveal = document.createElement("div");
+  reveal.className = "swim-reveal-grid";
+
+  for (const result of state.lastRoundScores || []) {
+    const player = getPlayer(result.playerId);
+    if (!player) continue;
+
+    const seat = document.createElement("div");
+    const schnautzSuit = result.score === 31 ? schnautzSuitForHand(player.hand) : null;
+    seat.className = [
+      "swim-reveal-seat",
+      result.lost ? "lost" : "",
+      player.eliminated ? "out" : "",
+      schnautzSuit ? "schnautz" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const header = document.createElement("div");
+    header.className = "swim-reveal-header";
+    const name = document.createElement("strong");
+    name.textContent = player.name;
+    const score = document.createElement("span");
+    score.textContent = `${formatSchwimmenScore(result.score)} pts`;
+    header.append(name, score);
+
+    const cards = document.createElement("div");
+    cards.className = "swim-reveal-cards";
+    for (const card of sortHand(player.hand)) {
+      const cardEl = renderCard(card);
+      cardEl.classList.add("reveal-card");
+      if (schnautzSuit && card.suit === schnautzSuit) cardEl.classList.add("schnautz-card");
+      cards.append(cardEl);
+    }
+
+    const status = document.createElement("small");
+    status.textContent = result.lost
+      ? player.eliminated
+        ? "lost and out"
+        : player.swimming
+          ? "lost and swimming"
+          : "lost 1 life"
+      : player.swimming
+        ? "swimming"
+        : "safe";
+
+    seat.append(header, cards, status);
+    reveal.append(seat);
+  }
+
+  return reveal;
+}
+
 function renderHumanHand() {
   const human = getHuman();
   els.humanHand.innerHTML = "";
+  els.humanHand.classList.toggle("swim-hand", isSchwimmenState());
   if (!human || human.hand.length === 0) {
     const note = document.createElement("p");
     note.className = "empty-note";
     note.textContent = human?.eliminated ? "You are out of lives." : "No cards in hand.";
     els.humanHand.append(note);
+    return;
+  }
+
+  if (isSchwimmenState()) {
+    renderSchwimmenHumanHand(human);
     return;
   }
 
@@ -984,6 +1653,33 @@ function renderHumanHand() {
     els.handHint.textContent = `Follow ${suitById(state.currentTrick.leadSuit).name} if you can.`;
   } else if (isTurn) {
     els.handHint.textContent = "Lead any card.";
+  } else {
+    els.handHint.textContent = "Wait for your turn.";
+  }
+}
+
+function renderSchwimmenHumanHand(human) {
+  if (selectedSwimHandCardId && !human.hand.some((card) => card.id === selectedSwimHandCardId)) {
+    selectedSwimHandCardId = null;
+  }
+
+  const canAct = canHumanSchwimmenAct();
+  for (const card of sortHand(human.hand)) {
+    const cardButton = renderCard(card, { asButton: true });
+    cardButton.classList.toggle("playable", canAct);
+    cardButton.classList.toggle("selected", selectedSwimHandCardId === card.id);
+    cardButton.classList.toggle("disabled", !canAct);
+    cardButton.disabled = !canAct;
+    cardButton.addEventListener("click", () => humanSelectSchwimmenCard(card.id));
+    els.humanHand.append(cardButton);
+  }
+
+  if (state.phase === "roundOver") {
+    els.handHint.textContent = `Round score: ${formatSchwimmenScore(schwimmenHandValue(human.hand))}.`;
+  } else if (canAct && selectedSwimHandCardId) {
+    els.handHint.textContent = "Choose a center card to swap.";
+  } else if (canAct) {
+    els.handHint.textContent = "Select one card, swap all, pass, knock, or call 31.";
   } else {
     els.handHint.textContent = "Wait for your turn.";
   }
@@ -1053,6 +1749,11 @@ function renderCorner(card, position) {
 }
 
 function renderActionBox() {
+  if (isSchwimmenState()) {
+    renderSchwimmenActionBox();
+    return;
+  }
+
   els.actionBox.innerHTML = "";
   const title = document.createElement("h3");
   const copy = document.createElement("p");
@@ -1122,6 +1823,54 @@ function renderActionBox() {
   els.actionBox.append(title, copy, stack);
 }
 
+function renderSchwimmenActionBox() {
+  els.actionBox.innerHTML = "";
+  const title = document.createElement("h3");
+  const copy = document.createElement("p");
+  const stack = document.createElement("div");
+  stack.className = "action-stack";
+  const human = getHuman();
+  const turn = getPlayer(state.turnPlayerId);
+
+  if (state.phase === "roundOver") {
+    title.textContent = "Round settled";
+    copy.textContent = "Lowest score lost a life. Deal again when the table is ready.";
+    stack.append(actionButton("Deal next round", "primary-action", beginSchwimmenRound));
+  } else if (state.phase === "gameOver") {
+    const winner = getPlayer(state.winnerId);
+    title.textContent = `${winner?.name || "No one"} wins`;
+    copy.textContent = "Final hands are open on the felt.";
+    stack.append(actionButton("New table", "primary-action", showMenu));
+  } else if (!human || human.eliminated) {
+    title.textContent = "Out";
+    copy.textContent = "You are out of this table.";
+  } else if (canHumanSchwimmenAct()) {
+    const score = schwimmenHandValue(human.hand);
+    const selected = human.hand.find((card) => card.id === selectedSwimHandCardId);
+    title.textContent = "Your turn";
+    copy.textContent = selected
+      ? `${cardLabel(selected)} is ready. Choose a center card to swap, or take another action.`
+      : `Your best score is ${formatSchwimmenScore(score)}. Trade one card, swap all, pass, knock, or call 31.`;
+    stack.append(
+      actionButton("Swap all", "primary-action", humanSchwimmenSwapAll),
+      actionButton("Pass", "table-action", humanSchwimmenPass),
+    );
+    if (!state.knockerId) {
+      stack.append(actionButton("Knock", "danger-action", humanSchwimmenKnock));
+    }
+    if (score === 31) {
+      stack.append(actionButton("Schnautz 31", "danger-action", humanSchwimmenSchnautz));
+    }
+  } else {
+    title.textContent = turn?.isHuman ? "Your move" : `${turn?.name || "Player"} thinks`;
+    copy.textContent = state.knockerId
+      ? `${getPlayer(state.knockerId)?.name || "A player"} knocked. Remaining players get one last turn.`
+      : "Players trade with the center, pass, or knock when their hand feels strong enough.";
+  }
+
+  els.actionBox.append(title, copy, stack);
+}
+
 function renderLog() {
   els.logList.innerHTML = "";
   for (const entry of state.log.slice(0, 12)) {
@@ -1133,6 +1882,12 @@ function renderLog() {
 }
 
 function renderButtons() {
+  if (isSchwimmenState()) {
+    els.toepBtn.classList.add("hidden");
+    renderFullscreenButton();
+    return;
+  }
+  els.toepBtn.classList.remove("hidden");
   els.toepBtn.disabled = !canHumanToep();
   renderFullscreenButton();
 }
@@ -1260,6 +2015,7 @@ function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
   }));
 
   const game = {
+    gameType: "toepen",
     mode: "online",
     roomId,
     maxPlayers: safeMaxPlayers,
@@ -1292,14 +2048,69 @@ function createOnlineGame(roster, roomId, maxPlayers, handSize = 4) {
   return onlineBeginRound(game);
 }
 
+function createOnlineSchwimmenGame(roster, roomId, maxPlayers, swimLives = 3) {
+  const safeMaxPlayers = Number(maxPlayers) || roster.length || 4;
+  const startingLives = Number(swimLives) === 4 ? 4 : 3;
+  const players = roster.map((seat, index) => ({
+    id: `p${index}`,
+    uid: seat.uid,
+    name: seat.name || `Player ${index + 1}`,
+    isHuman: false,
+    lives: startingLives,
+    swimming: false,
+    hand: [],
+    active: true,
+    folded: false,
+    eliminated: false,
+    playedCards: [],
+  }));
+
+  const game = {
+    gameType: "schwimmen",
+    mode: "online",
+    roomId,
+    maxPlayers: safeMaxPlayers,
+    swimLives: startingLives,
+    players,
+    deck: [],
+    discard: [],
+    centerCards: [],
+    round: 0,
+    turnPlayerId: players[0]?.id || "p0",
+    nextLeaderId: players[0]?.id || "p0",
+    dealerId: null,
+    dealAnimationId: 0,
+    phase: "roundOver",
+    knockerId: null,
+    knockRemainingIds: [],
+    passStreak: 0,
+    lastRoundScores: [],
+    log: ["Online Schnautz table is full. Cards are being dealt."],
+    winnerId: null,
+  };
+
+  return onlineSchwimmenBeginRound(game);
+}
+
 function loadOnlineGame(roomId, uid, game, room = {}) {
   clearTimer();
+  const previousRoomId = onlineContext.roomId;
   onlineContext = { roomId, uid };
+  if (previousRoomId !== roomId) {
+    lastToastSerial = null;
+    lastToastMessage = null;
+  }
   state = normalizeOnlineGame(game, uid);
   document.body.classList.add("game-active");
   els.menuScreen.classList.add("hidden");
 
   if (state.phase === "gameOver") {
+    if (isSchwimmenState()) {
+      els.endScreen.classList.add("hidden");
+      els.gameScreen.classList.remove("hidden");
+      render();
+      return;
+    }
     const winner = getPlayer(state.winnerId);
     els.gameScreen.classList.add("hidden");
     els.endScreen.classList.remove("hidden");
@@ -1318,8 +2129,12 @@ function loadOnlineGame(roomId, uid, game, room = {}) {
 
 function normalizeOnlineGame(game, uid) {
   const copy = cloneData(game);
+  copy.gameType = copy.gameType || "toepen";
   copy.mode = "online";
   copy.players = toList(copy.players);
+  if (copy.gameType === "schwimmen") {
+    return normalizeOnlineSchwimmenGame(copy, uid);
+  }
   copy.maxPlayers = Number(copy.maxPlayers) || copy.players.length || 4;
   copy.handSize = copy.maxPlayers === 2 && Number(copy.handSize || copy.tricksPerRound) === 8 ? 8 : 4;
   copy.tricksPerRound = copy.handSize;
@@ -1338,6 +2153,7 @@ function normalizeOnlineGame(game, uid) {
   copy.dirtyQueue = toList(copy.dirtyQueue);
   copy.dirtyClaimedIds = toList(copy.dirtyClaimedIds);
   copy.log = toList(copy.log);
+  copy.logSerial = Number(copy.logSerial) || 0;
   copy.pendingToep = normalizePendingResponses(copy.pendingToep);
   copy.pendingDirtyClaim = normalizePendingResponses(copy.pendingDirtyClaim);
   copy.dealerId = copy.dealerId || null;
@@ -1347,8 +2163,41 @@ function normalizeOnlineGame(game, uid) {
   return copy;
 }
 
+function normalizeOnlineSchwimmenGame(copy, uid) {
+  copy.maxPlayers = Number(copy.maxPlayers) || copy.players.length || 4;
+  copy.swimLives = Number(copy.swimLives) === 4 ? 4 : 3;
+  copy.localPlayerId = copy.players?.find((player) => player.uid === uid)?.id || null;
+  copy.players = copy.players.map((player) => ({
+    ...player,
+    isHuman: player.uid === uid,
+    lives: Number.isFinite(Number(player.lives)) ? Number(player.lives) : copy.swimLives,
+    swimming: Boolean(player.swimming),
+    hand: toList(player.hand),
+    playedCards: toList(player.playedCards),
+    active: player.active !== false,
+    folded: false,
+    eliminated: Boolean(player.eliminated),
+  }));
+  copy.centerCards = toList(copy.centerCards);
+  copy.discard = toList(copy.discard);
+  copy.deck = toList(copy.deck);
+  copy.knockRemainingIds = toList(copy.knockRemainingIds);
+  copy.lastRoundScores = toList(copy.lastRoundScores);
+  copy.log = toList(copy.log);
+  copy.logSerial = Number(copy.logSerial) || 0;
+  copy.dealerId = copy.dealerId || null;
+  copy.nextLeaderId = copy.nextLeaderId || copy.players[0]?.id || null;
+  copy.turnPlayerId = copy.turnPlayerId || copy.nextLeaderId;
+  copy.dealAnimationId = Number(copy.dealAnimationId) || 0;
+  copy.passStreak = Number(copy.passStreak) || 0;
+  return copy;
+}
+
 function reduceOnlineAction(game, action) {
   if (!game || !action?.uid) return game;
+  if ((game.gameType || "toepen") === "schwimmen") {
+    return reduceOnlineSchwimmenAction(game, action);
+  }
   const next = normalizeOnlineGame(game, action.uid);
   const player = next.players.find((seat) => seat.uid === action.uid);
   if (!player || player.eliminated) return game;
@@ -1393,6 +2242,209 @@ function reduceOnlineAction(game, action) {
   }
 
   return game;
+}
+
+function reduceOnlineSchwimmenAction(game, action) {
+  if (!game || !action?.uid) return game;
+  const next = normalizeOnlineGame(game, action.uid);
+  const player = next.players.find((seat) => seat.uid === action.uid);
+  if (!player || player.eliminated) return game;
+
+  if (action.type === "beginRound") {
+    if (next.phase !== "roundOver") return game;
+    return onlineSchwimmenBeginRound(next);
+  }
+
+  if (action.type === "swimSwapOne") {
+    if (!onlineCanSchwimmenAct(next, player)) return game;
+    const handCard = player.hand.find((card) => card.id === action.handCardId);
+    const centerCard = next.centerCards.find((card) => card.id === action.centerCardId);
+    if (!handCard || !centerCard) return game;
+    performSchwimmenSwapOne(next, player, handCard.id, centerCard.id);
+    onlineLog(next, `${player.name} trades ${cardLabel(handCard)} for ${cardLabel(centerCard)}.`);
+    onlineSchwimmenAfterAction(next, player, { changed: true });
+    return next;
+  }
+
+  if (action.type === "swimSwapAll") {
+    if (!onlineCanSchwimmenAct(next, player)) return game;
+    performSchwimmenSwapAll(next, player);
+    onlineLog(next, `${player.name} trades all three cards.`);
+    onlineSchwimmenAfterAction(next, player, { changed: true });
+    return next;
+  }
+
+  if (action.type === "swimPass") {
+    if (!onlineCanSchwimmenAct(next, player)) return game;
+    onlineLog(next, `${player.name} passes.`);
+    onlineSchwimmenAfterAction(next, player, { changed: false });
+    return next;
+  }
+
+  if (action.type === "swimKnock") {
+    if (!onlineCanSchwimmenAct(next, player) || next.knockerId) return game;
+    onlineSchwimmenKnock(next, player);
+    return next;
+  }
+
+  if (action.type === "swimSchnautz") {
+    if (!onlineCanSchwimmenAct(next, player) || schwimmenHandValue(player.hand) !== 31) return game;
+    onlineSchwimmenFinishRound(next, `${player.name} announces Schnautz with 31.`);
+    return next;
+  }
+
+  return game;
+}
+
+function onlineSchwimmenBeginRound(game) {
+  game.round += 1;
+  game.deck = shuffle(createDeck());
+  game.discard = [];
+  game.centerCards = [];
+  game.knockerId = null;
+  game.knockRemainingIds = [];
+  game.passStreak = 0;
+  game.lastRoundScores = [];
+  game.phase = "swimPlay";
+
+  for (const player of game.players) {
+    player.active = !player.eliminated;
+    player.folded = false;
+    player.playedCards = [];
+    player.hand = player.eliminated ? [] : drawFromGameDeck(game, 3);
+  }
+
+  game.centerCards = drawFromGameDeck(game, 3);
+  onlineSchwimmenAssignDealerForRound(game);
+  game.turnPlayerId = firstSchwimmenPlayerIdFrom(game.nextLeaderId, game);
+  game.dealAnimationId = (Number(game.dealAnimationId) || 0) + 1;
+  onlineLog(
+    game,
+    `${onlineGetPlayer(game, game.dealerId)?.name || "Dealer"} shuffles and deals. ${
+      onlineGetPlayer(game, game.turnPlayerId)?.name || "Next seat"
+    } starts.`,
+  );
+  onlineLog(game, `Schnautz round ${game.round} starts. Trade with the center or knock.`);
+  return game;
+}
+
+function onlineCanSchwimmenAct(game, player) {
+  return Boolean(
+    game.phase === "swimPlay" &&
+      player &&
+      game.turnPlayerId === player.id &&
+      !player.eliminated &&
+      game.knockerId !== player.id,
+  );
+}
+
+function onlineSchwimmenKnock(game, player) {
+  game.knockerId = player.id;
+  game.knockRemainingIds = activeSchwimmenPlayers(game)
+    .filter((seat) => seat.id !== player.id)
+    .map((seat) => seat.id);
+  game.passStreak = 0;
+  onlineLog(game, `${player.name} knocks. Everyone else gets one last turn.`);
+  if (game.knockRemainingIds.length === 0) {
+    onlineSchwimmenFinishRound(game, `${player.name} knocks and stands alone.`);
+    return;
+  }
+  game.turnPlayerId = nextSchwimmenTurnId(player.id, game);
+}
+
+function onlineSchwimmenAfterAction(game, player, options = {}) {
+  if (options.changed) {
+    game.passStreak = 0;
+  } else if (!game.knockerId) {
+    game.passStreak = (Number(game.passStreak) || 0) + 1;
+    if (game.passStreak >= activeSchwimmenPlayers(game).length) {
+      onlineSchwimmenReplaceCenter(game);
+      game.passStreak = 0;
+    }
+  }
+
+  const score = schwimmenHandValue(player.hand);
+  if (score === 31) {
+    onlineSchwimmenFinishRound(game, `${player.name} announces Schnautz with 31.`);
+    return;
+  }
+
+  if (game.knockerId && player.id !== game.knockerId) {
+    game.knockRemainingIds = (game.knockRemainingIds || []).filter((id) => id !== player.id);
+    if (game.knockRemainingIds.length === 0) {
+      onlineSchwimmenFinishRound(game, `${onlineGetPlayer(game, game.knockerId)?.name || "The knocker"}'s final lap is complete.`);
+      return;
+    }
+  }
+
+  game.turnPlayerId = nextSchwimmenTurnId(player.id, game);
+}
+
+function onlineSchwimmenReplaceCenter(game) {
+  game.discard = [...(game.discard || []), ...(game.centerCards || [])];
+  game.centerCards = drawFromGameDeck(game, 3);
+  onlineLog(game, "Everyone passed. The center is washed away and three new cards appear.");
+}
+
+function onlineSchwimmenFinishRound(game, reason) {
+  if (reason) onlineLog(game, reason);
+  const players = activeSchwimmenPlayers(game);
+  const scores = players.map((player) => ({
+    playerId: player.id,
+    name: player.name,
+    score: schwimmenHandValue(player.hand),
+    lost: false,
+  }));
+  const lowest = Math.min(...scores.map((entry) => entry.score));
+  const losers = scores.filter((entry) => entry.score === lowest);
+
+  for (const result of scores) {
+    result.lost = losers.some((loser) => loser.playerId === result.playerId);
+  }
+  game.lastRoundScores = scores.sort((a, b) => b.score - a.score);
+
+  for (const loser of losers) {
+    const player = onlineGetPlayer(game, loser.playerId);
+    if (!player || player.eliminated) continue;
+    if (player.swimming || player.lives <= 0) {
+      player.eliminated = true;
+      player.active = false;
+      onlineLog(game, `${player.name} loses with ${formatSchwimmenScore(loser.score)} and sinks out.`);
+    } else if (player.lives > 1) {
+      player.lives -= 1;
+      onlineLog(game, `${player.name} loses with ${formatSchwimmenScore(loser.score)} and loses 1 life.`);
+    } else {
+      player.lives = 0;
+      player.swimming = true;
+      onlineLog(game, `${player.name} loses with ${formatSchwimmenScore(loser.score)} and starts swimming.`);
+    }
+  }
+
+  const remaining = activeSchwimmenPlayers(game);
+  if (remaining.length <= 1) {
+    onlineSchwimmenFinishGame(game, remaining[0]?.id || null);
+    return;
+  }
+
+  game.phase = "roundOver";
+}
+
+function onlineSchwimmenFinishGame(game, winnerId) {
+  const winner = onlineGetPlayer(game, winnerId);
+  game.phase = "gameOver";
+  game.winnerId = winner?.id || null;
+  onlineLog(game, `${winner?.name || "The table"} wins the Schnautz match.`);
+}
+
+function onlineSchwimmenAssignDealerForRound(game) {
+  const active = activeSchwimmenPlayers(game);
+  if (active.length === 0) return;
+  if (!game.dealerId) {
+    game.dealerId = schwimmenSeatIdFrom(active[0].id, -1, game);
+  } else {
+    game.dealerId = schwimmenSeatIdFrom(game.dealerId, 1, game);
+  }
+  game.nextLeaderId = schwimmenSeatIdFrom(game.dealerId, 1, game);
 }
 
 function onlineBeginRound(game) {
@@ -1792,6 +2844,7 @@ function onlineGetPlayer(game, id) {
 }
 
 function onlineLog(game, message) {
+  game.logSerial = (Number(game.logSerial) || 0) + 1;
   game.log = [message, ...(game.log || [])].slice(0, 40);
 }
 
@@ -2001,6 +3054,14 @@ function cardLabel(card) {
 }
 
 function playerStateText(player) {
+  if (isSchwimmenState()) {
+    if (player.eliminated) return "out";
+    const visibleScore = player.isHuman || state.phase === "roundOver" || state.phase === "gameOver";
+    const scoreText = visibleScore ? `${formatSchwimmenScore(schwimmenHandValue(player.hand))} pts` : `${player.hand.length} cards`;
+    const swimText = player.swimming ? " · swimming" : "";
+    if (state.phase === "swimPlay" && state.turnPlayerId === player.id) return `turn · ${scoreText}${swimText}`;
+    return `${scoreText}${swimText}`;
+  }
   if (player.eliminated) return "out";
   if (player.folded) return "folded";
   if (!player.active) return "waiting";
@@ -2014,6 +3075,7 @@ function phaseName() {
     dirtyChallenge: "Challenge",
     play: "Play",
     toepResponse: "Toep",
+    swimPlay: "Schnautz",
     roundOver: "Round over",
     gameOver: "Game over",
   };
@@ -2021,7 +3083,76 @@ function phaseName() {
 }
 
 function log(message) {
+  state.logSerial = (Number(state.logSerial) || 0) + 1;
   state.log.unshift(message);
+}
+
+function maybeShowLatestToast() {
+  const message = preferredToastLogMessage();
+  const toastText = toastTextForLog(message);
+  if (!toastText) return;
+
+  const serial = Number(state.logSerial) || 0;
+  const repeated = serial > 0 ? serial === lastToastSerial : message === lastToastMessage;
+  if (repeated) return;
+
+  lastToastSerial = serial;
+  lastToastMessage = message;
+  showTableToast(toastText);
+}
+
+function preferredToastLogMessage() {
+  const recent = (state?.log || []).slice(0, 5);
+  return recent.find((entry) => /announces Schnautz with 31/i.test(entry)) || recent[0] || "";
+}
+
+function toastTextForLog(message) {
+  if (!message || !TOAST_PATTERN.test(message)) return "";
+  if (/round .*starts|trade with the center|trades?|wins trick/i.test(message)) return "";
+
+  const actor = message.match(/^(.+?)\s+(announces|calls|knocks|passes|folds|loses|sinks|wins|takes|stands|challenges)/i)?.[1];
+  if (/announces Schnautz with 31/i.test(message)) return `${actor || "Player"} has Schnautz (31).`;
+  if (/calls Toep/i.test(message)) return `${actor || "Player"} calls Toep.`;
+  if (/knocks/i.test(message)) return `${actor || "Player"} knocks.`;
+  if (/passes/i.test(message)) return `${actor || "Player"} passes.`;
+  if (/folds/i.test(message)) return `${actor || "Player"} folds.`;
+  if (/starts swimming/i.test(message)) return `${actor || "Player"} is swimming.`;
+  if (/sinks out/i.test(message)) return `${actor || "Player"} is out.`;
+  if (/loses/i.test(message)) return `${actor || "Player"} loses a life.`;
+  return message.replace(/\s+/g, " ").trim();
+}
+
+function showTableToast(message) {
+  if (!els.tableToast) return;
+  if (toastTimer) {
+    window.clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+
+  els.tableToast.textContent = message;
+  els.tableToast.classList.remove("hidden", "leaving", "show");
+  void els.tableToast.offsetWidth;
+  els.tableToast.classList.add("show");
+
+  toastTimer = window.setTimeout(() => {
+    els.tableToast.classList.remove("show");
+    els.tableToast.classList.add("leaving");
+    toastTimer = window.setTimeout(() => {
+      els.tableToast.classList.add("hidden");
+      els.tableToast.classList.remove("leaving");
+      toastTimer = null;
+    }, 420);
+  }, 2000);
+}
+
+function clearTableToast() {
+  if (toastTimer) {
+    window.clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+  if (!els.tableToast) return;
+  els.tableToast.classList.add("hidden");
+  els.tableToast.classList.remove("show", "leaving");
 }
 
 function schedule(fn, delay) {
@@ -2045,9 +3176,13 @@ function clearDealTimer() {
 
 window.ToepenGame = {
   createOnlineGame,
+  createOnlineSchwimmenGame,
   loadOnlineGame,
   reduceOnlineAction,
   showMenu,
+  getSelectedGameType: () => selectedGameType,
+  getMenuGameSettings,
+  schwimmenHandValue,
 };
 
 boot();

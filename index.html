@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="A luxury-styled browser implementation of Toepen with bot opponents, online tables, lives, Dirty Laundry, Toep raises, and final-trick scoring."
+      content="A luxury-styled browser card table with Toepen and Schnautz / 31 / Schwimmen for bot opponents and online multiplayer."
     />
     <meta name="theme-color" content="#090806" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Toepen Royale" />
+    <meta name="apple-mobile-web-app-title" content="Doupe Royale" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>Toepen Royale</title>
+    <title>Doupe Royale</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="assets/css/styles.css" />
   </head>
@@ -20,24 +20,28 @@
       <section class="screen menu-screen" id="menuScreen">
         <div class="menu-art">
           <div class="deck-stack" aria-hidden="true">
-            <div class="show-card red">10<span>&hearts;</span></div>
-            <div class="show-card black">9<span>&spades;</span></div>
-            <div class="show-card red">8<span>&diams;</span></div>
+            <div class="show-card red">A<span>&hearts;</span></div>
+            <div class="show-card black">K<span>&spades;</span></div>
+            <div class="show-card red">Q<span>&diams;</span></div>
           </div>
         </div>
 
         <div class="menu-copy">
-          <p class="eyebrow">Dutch bluff table</p>
-          <h1>Toepen Royale</h1>
+          <p class="eyebrow">Solo bots or online lobbies</p>
+          <h1>Toepen & Schnautz</h1>
           <p class="lede">
-            Win the final trick, pressure the table with Toep calls, and keep
-            your last lives under velvet-black lights.
+            Pick Toepen for bluff-heavy final tricks or Schnautz / 31 for tense
+            card swaps, then choose bots or an online table.
           </p>
 
           <div class="setup-panel" aria-labelledby="playersHeading">
             <div>
               <p class="panel-kicker">Table setup</p>
-              <h2 id="playersHeading">Co-players</h2>
+              <h2 id="playersHeading">Game and seats</h2>
+            </div>
+            <div class="game-picker" role="group" aria-label="Choose card game">
+              <button class="pick-button active" id="gameToepenBtn" type="button" aria-pressed="true">Toepen</button>
+              <button class="pick-button" id="gameSchwimmenBtn" type="button" aria-pressed="false">Schnautz / 31</button>
             </div>
             <div class="mode-picker" role="group" aria-label="Choose game mode">
               <button class="pick-button active" id="soloModeBtn" type="button">Solo bots</button>
@@ -54,9 +58,16 @@
                 <span>Bots</span>
                 <strong id="botCountLabel">2</strong>
               </div>
-              <div class="setup-row">
+              <div class="setup-row" id="localToepenLivesRow">
                 <span>Starting lives</span>
                 <strong>10</strong>
+              </div>
+              <div class="setup-row hidden" id="localSwimLivesRow">
+                <span>Starting lives</span>
+                <select class="select-field compact-select" id="localSwimLivesSelect" aria-label="Schnautz starting lives">
+                  <option value="3" selected>3 lives</option>
+                  <option value="4">4 lives</option>
+                </select>
               </div>
               <button class="primary-action" id="startGameBtn" type="button">Take seat</button>
             </div>
@@ -92,6 +103,14 @@
                 </select>
               </div>
 
+              <div class="setup-row hidden" id="onlineSwimLivesRow">
+                <span>Starting lives</span>
+                <select class="select-field" id="onlineSwimLivesSelect" aria-label="Online Schnautz starting lives">
+                  <option value="3" selected>3 lives</option>
+                  <option value="4">4 lives</option>
+                </select>
+              </div>
+
               <div class="online-actions">
                 <button class="primary-action" id="createLobbyBtn" type="button">Open lobby</button>
                 <button class="ghost-action" id="refreshLobbiesBtn" type="button">Find lobbies</button>
@@ -117,20 +136,20 @@
       <section class="screen game-screen hidden" id="gameScreen">
         <header class="game-header">
           <div>
-            <p class="eyebrow">Toepen Royale</p>
+            <p class="eyebrow">Doupe Royale</p>
             <h2 id="roundTitle">Round 1</h2>
           </div>
           <div class="table-meters" aria-label="Round status">
             <div>
-              <span>Stake</span>
+              <span id="stakeLabel">Stake</span>
               <strong id="stakeValue">1</strong>
             </div>
             <div>
-              <span>Trick</span>
+              <span id="trickLabel">Trick</span>
               <strong id="trickValue">1 / 4</strong>
             </div>
             <div>
-              <span>Lead</span>
+              <span id="leadLabel">Lead</span>
               <strong id="leadValue">-</strong>
             </div>
           </div>
@@ -185,6 +204,8 @@
               <p id="dealText">Shuffling the deck</p>
             </div>
 
+            <div class="table-toast hidden" id="tableToast" aria-live="polite"></div>
+
             <div class="hand-zone">
               <div class="hand-label">
                 <span>Your hand</span>
@@ -230,16 +251,16 @@
           <button class="icon-action" id="closeRulesBtn" type="button" aria-label="Close rules">x</button>
         </div>
         <ol>
-          <li>Each active player gets four cards from a 32-card deck. Two-player online rooms may choose eight cards.</li>
-          <li>Card power is 10, 9, 8, 7, A, K, Q, J. There is no trump.</li>
-          <li>The dealer rotates each round. The next living seat after the dealer starts.</li>
-          <li>Dirty Laundry can be claimed once per player per round.</li>
-          <li>Dirty Laundry can exchange a weak hand: four A/K/Q/J cards, or three of those plus one 7.</li>
-          <li>Players must follow the led suit when possible.</li>
-          <li>Only the final trick decides the round winner.</li>
-          <li>Only the trick leader may Toep, and only before leading that trick.</li>
-          <li>Folding pays the previous stake immediately.</li>
-          <li>Active round losers pay the current stake. Players at zero lives leave the table.</li>
+          <li>Toepen: four cards each, or eight in two-player duel rooms. Power is 10, 9, 8, 7, A, K, Q, J.</li>
+          <li>Toepen: follow suit when possible. Only the final trick decides the round winner.</li>
+          <li>Toepen: Dirty Laundry can be claimed once per player per round before play starts.</li>
+          <li>Toepen: only the trick leader may Toep, and only before leading that trick.</li>
+          <li>Schnautz / 31: each player gets three cards. Three cards lie open in the center.</li>
+          <li>Schnautz / 31: score the best same-suit sum. A is 11; 10, K, Q, J are 10; number cards keep value.</li>
+          <li>Schnautz / 31: three equal ranks score 30.5. A suited 31 is strongest and can end the round at once.</li>
+          <li>Schnautz / 31: on your turn, swap one card with the center, swap all three, pass, or knock.</li>
+          <li>Schnautz / 31: after a knock, every other active player gets one final turn.</li>
+          <li>Schnautz / 31: lowest score loses a life. At zero lives you swim; lose again and you are out.</li>
         </ol>
       </dialog>
     </main>
