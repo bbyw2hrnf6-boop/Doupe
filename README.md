@@ -35,6 +35,9 @@ Multiplayer uses Firebase from CDN ES modules. No npm, Vite, or build step.
 - Schnautz / 31 supports one-card swaps, all-card swaps, passing, knocking, instant 31, swimming at 0 lives, and elimination after another loss.
 - Each round shows a shuffle/deal animation. The dealer rotates, and the next living seat after the dealer starts.
 - Moves are written through Realtime Database transactions.
+- Finished games are marked closed/finished so they no longer appear as open lobbies.
+- Online menu cleanup deletes rooms unused for more than 48 hours, and also removes empty abandoned open rooms after a short grace period.
+- The online hamburger menu can close or delete rooms manually.
 
 Current test rules are open. For real public play, restrict room writes to authenticated room players. For cheat-resistant hidden hands, move dealing and move validation to trusted server code such as Cloud Functions.
 

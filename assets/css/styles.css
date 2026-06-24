@@ -220,7 +220,7 @@ button {
 .mode-picker,
 .online-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr auto;
   gap: 8px;
 }
 
@@ -316,6 +316,67 @@ button {
   border: 1px solid rgba(244, 214, 150, 0.14);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.18);
+}
+
+.room-tools {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(244, 214, 150, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.room-tools .section-title {
+  margin-bottom: 0;
+}
+
+.room-tools-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.room-tools-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.room-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid rgba(244, 214, 150, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.room-row strong {
+  display: block;
+}
+
+.room-row small {
+  color: var(--muted);
+}
+
+.room-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.room-row-actions .table-action,
+.room-row-actions .danger-action {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 0.74rem;
+}
+
+.room-tools-toggle {
+  min-width: 44px;
 }
 
 .pick-button,
@@ -1669,6 +1730,22 @@ body.game-active .app-shell {
   .mode-picker,
   .online-actions {
     grid-template-columns: 1fr;
+  }
+
+  .room-tools-toggle {
+    min-width: 0;
+  }
+
+  .room-row {
+    grid-template-columns: 1fr;
+  }
+
+  .room-row-actions {
+    justify-content: stretch;
+  }
+
+  .room-row-actions button {
+    flex: 1;
   }
 
   .setup-mode {

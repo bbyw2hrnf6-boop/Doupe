@@ -114,9 +114,21 @@
               <div class="online-actions">
                 <button class="primary-action" id="createLobbyBtn" type="button">Open lobby</button>
                 <button class="ghost-action" id="refreshLobbiesBtn" type="button">Find lobbies</button>
+                <button class="icon-action room-tools-toggle" id="roomToolsBtn" type="button" aria-label="Manage rooms">☰</button>
               </div>
 
               <div class="lobby-status" id="onlineStatus">Choose Online multiplayer to connect.</div>
+
+              <div class="room-tools hidden" id="roomToolsPanel">
+                <div class="section-title">
+                  <span>Room cleanup</span>
+                  <small>close ghosts</small>
+                </div>
+                <div class="room-tools-actions">
+                  <button class="ghost-action" id="cleanupRoomsBtn" type="button">Clean old rooms</button>
+                </div>
+                <div class="room-tools-list" id="roomToolsList"></div>
+              </div>
 
               <div class="lobby-panel hidden" id="lobbyPanel">
                 <div class="section-title">

@@ -15,6 +15,9 @@ import {
 const firebaseConfig = window.TOEPEN_FIREBASE_CONFIG;
 
 const ROOM_PATH = "toepenRooms";
+const STALE_ROOM_MS = 48 * 60 * 60 * 1000;
+const EMPTY_OPEN_ROOM_GRACE_MS = 2 * 60 * 1000;
+const CLEANUP_THROTTLE_MS = 60 * 1000;
 let app = null;
 let auth = null;
 let db = null;
@@ -36,6 +39,10 @@ const ui = {
   onlineSwimLivesSelect: document.querySelector("#onlineSwimLivesSelect"),
   createLobbyBtn: document.querySelector("#createLobbyBtn"),
   refreshLobbiesBtn: document.querySelector("#refreshLobbiesBtn"),
+  roomToolsBtn: document.querySelector("#roomToolsBtn"),
+  roomToolsPanel: document.querySelector("#roomToolsPanel"),
+  cleanupRoomsBtn: document.querySelector("#cleanupRoomsBtn"),
+  roomToolsList: document.querySelector("#roomToolsList"),
   onlineStatus: document.querySelector("#onlineStatus"),
   lobbyPanel: document.querySelector("#lobbyPanel"),
   lobbyTitle: document.querySelector("#lobbyTitle"),
@@ -50,6 +57,9 @@ let activeRoomId = null;
 let activeRoomRef = null;
 let roomsListening = false;
 let joinedRoomListening = false;
+let roomToolsOpen = false;
+let roomCache = [];
+let lastCleanupAt = 0;
 
 bootMultiplayer();
 
@@ -71,6 +81,8 @@ function bootMultiplayer() {
   ui.createLobbyBtn.addEventListener("click", createLobby);
   ui.refreshLobbiesBtn.addEventListener("click", findLobbies);
   ui.leaveLobbyBtn.addEventListener("click", leaveRoom);
+  ui.roomToolsBtn.addEventListener("click", toggleRoomTools);
+  ui.cleanupRoomsBtn.addEventListener("click", () => cleanupStaleRooms(roomCache, { force: true }));
   ui.onlineSeatSelect.addEventListener("change", syncOnlineHandSize);
   ui.gameToepenBtn.addEventListener("click", syncOnlineGameRows);
   ui.gameSchwimmenBtn.addEventListener("click", syncOnlineGameRows);
@@ -134,8 +146,13 @@ function listenForRooms() {
   roomsListening = true;
   onValue(ref(db, ROOM_PATH), (snapshot) => {
     const rooms = snapshot.val() || {};
+    roomCache = Object.values(rooms)
+      .filter(Boolean)
+      .sort((a, b) => roomTime(b) - roomTime(a));
+    cleanupStaleRooms(roomCache);
+    renderRoomTools();
     renderLobbyList(
-      Object.values(rooms)
+      roomCache
         .filter((room) => room && room.status === "open")
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     );
@@ -243,6 +260,14 @@ function subscribeJoinedRoom(roomId) {
       return;
     }
 
+    if (room.status === "closed") {
+      activeRoomId = null;
+      activeRoomRef = null;
+      hideLobbyPanel();
+      setStatus("Room closed.");
+      return;
+    }
+
     if (room.status === "playing" && room.game) {
       hideLobbyPanel();
       window.ToepenGame.loadOnlineGame(room.id, currentUser.uid, room.game, room);
@@ -271,7 +296,11 @@ async function sendAction(action) {
     });
     room.game = game;
     room.updatedAt = Date.now();
-    if (game.phase === "gameOver") room.status = "finished";
+    if (game.phase === "gameOver") {
+      room.status = "finished";
+      room.closedAt = Date.now();
+      room.closedReason = "game-over";
+    }
     return room;
   });
 }
@@ -362,6 +391,110 @@ function renderLobbyPanel(room) {
   );
 }
 
+function toggleRoomTools() {
+  roomToolsOpen = !roomToolsOpen;
+  ui.roomToolsBtn.setAttribute("aria-pressed", String(roomToolsOpen));
+  ui.roomToolsPanel.classList.toggle("hidden", !roomToolsOpen);
+  if (roomToolsOpen) {
+    findLobbies();
+    renderRoomTools();
+  }
+}
+
+function renderRoomTools() {
+  if (!ui.roomToolsList || !roomToolsOpen) return;
+  ui.roomToolsList.innerHTML = "";
+
+  if (!roomCache.length) {
+    const empty = document.createElement("div");
+    empty.className = "lobby-status";
+    empty.textContent = "No rooms found.";
+    ui.roomToolsList.append(empty);
+    return;
+  }
+
+  for (const room of roomCache.slice(0, 32)) {
+    const row = document.createElement("div");
+    row.className = "room-row";
+
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = roomTitle(room);
+    const meta = document.createElement("small");
+    meta.textContent = `${roomStatusText(room)} · ${roomGameText(room)} · ${roomAgeText(room)}`;
+    body.append(title, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "room-row-actions";
+
+    if (room.status !== "closed" && room.status !== "finished") {
+      actions.append(actionButton("Close", "table-action", () => closeRoom(room.id)));
+    }
+    actions.append(actionButton("Delete", "danger-action", () => deleteRoom(room.id)));
+
+    row.append(body, actions);
+    ui.roomToolsList.append(row);
+  }
+}
+
+async function closeRoom(roomId) {
+  if (!roomId) return;
+  try {
+    await ensureAuth();
+    await runTransaction(ref(db, `${ROOM_PATH}/${roomId}`), (room) => {
+      if (!room) return room;
+      room.status = "closed";
+      room.closedAt = Date.now();
+      room.closedReason = "manual";
+      room.updatedAt = Date.now();
+      return room;
+    });
+    setStatus("Room closed.");
+  } catch (error) {
+    setStatus(`Could not close room: ${friendlyError(error)}`);
+  }
+}
+
+async function deleteRoom(roomId) {
+  if (!roomId) return;
+  try {
+    await ensureAuth();
+    await remove(ref(db, `${ROOM_PATH}/${roomId}`));
+    if (activeRoomId === roomId) {
+      activeRoomId = null;
+      activeRoomRef = null;
+      hideLobbyPanel();
+    }
+    setStatus("Room deleted.");
+  } catch (error) {
+    setStatus(`Could not delete room: ${friendlyError(error)}`);
+  }
+}
+
+async function cleanupStaleRooms(rooms, options = {}) {
+  try {
+    const now = Date.now();
+    if (!options.force && now - lastCleanupAt < CLEANUP_THROTTLE_MS) return;
+    lastCleanupAt = now;
+
+    const staleRooms = (rooms || []).filter(
+      (room) =>
+        room?.id &&
+        room.id !== activeRoomId &&
+        (now - roomTime(room) > STALE_ROOM_MS || isAbandonedOpenRoom(room, now)),
+    );
+    if (!staleRooms.length) {
+      if (options.force) setStatus("No rooms older than 48 hours.");
+      return;
+    }
+
+    await Promise.allSettled(staleRooms.map((room) => remove(ref(db, `${ROOM_PATH}/${room.id}`))));
+    setStatus(`${staleRooms.length} stale room${staleRooms.length === 1 ? "" : "s"} deleted.`);
+  } catch (error) {
+    if (options.force) setStatus(`Could not clean rooms: ${friendlyError(error)}`);
+  }
+}
+
 function hideLobbyPanel() {
   ui.lobbyPanel.classList.add("hidden");
   ui.lobbyPlayers.innerHTML = "";
@@ -405,6 +538,15 @@ function selectedLobbyGameType() {
   return window.ToepenGame?.getSelectedGameType?.() === "schwimmen" ? "schwimmen" : "toepen";
 }
 
+function roomStatusText(room) {
+  if (isAbandonedOpenRoom(room)) return "open · empty";
+  if (isRoomStale(room)) return `${room?.status || "room"} · stale`;
+  if (room?.status === "finished") return "finished";
+  if (room?.status === "closed") return "closed";
+  if (room?.status === "playing") return "playing";
+  return "open";
+}
+
 function roomGameText(room) {
   if (room?.gameType === "schwimmen") {
     const lives = Number(room?.swimLives) === 4 ? 4 : 3;
@@ -416,6 +558,36 @@ function roomGameText(room) {
 
 function roomTitle(room) {
   return cleanLobbyName(room?.lobbyName) || `Room ${room?.code || room?.id?.slice(-4) || "OPEN"}`;
+}
+
+function roomAgeText(room) {
+  const ageMs = Math.max(0, Date.now() - roomTime(room));
+  const hours = Math.floor(ageMs / (60 * 60 * 1000));
+  if (hours < 1) return "used now";
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function roomTime(room) {
+  return Number(room?.updatedAt || room?.closedAt || room?.createdAt || 0);
+}
+
+function isRoomStale(room) {
+  return Date.now() - roomTime(room) > STALE_ROOM_MS;
+}
+
+function isAbandonedOpenRoom(room, now = Date.now()) {
+  return room?.status === "open" && Object.keys(room.players || {}).length === 0 && now - roomTime(room) > EMPTY_OPEN_ROOM_GRACE_MS;
+}
+
+function actionButton(text, className, handler) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = text;
+  button.addEventListener("click", handler);
+  return button;
 }
 
 function rosterFromPlayers(players) {
